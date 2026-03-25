@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, BarChart3, Wallet, Brain, Fish } from "lucide-react";
+import { Compass, BarChart3, Wallet, Brain, Fish, LogOut } from "lucide-react";
+import { usePrivy } from "@privy-io/react-auth";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
@@ -14,6 +15,17 @@ const NAV_ITEMS = [
 
 export default function Header() {
   const pathname = usePathname();
+  const { ready, authenticated, login, logout, user } = usePrivy();
+
+  // Get Solana wallet address if connected
+  const solanaWallet = user?.linkedAccounts?.find(
+    (a): a is Extract<typeof a, { type: "wallet" }> =>
+      a.type === "wallet" && "chainType" in a && a.chainType === "solana"
+  );
+  const walletAddress = solanaWallet && "address" in solanaWallet ? solanaWallet.address : null;
+  const shortAddress = walletAddress
+    ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
+    : null;
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
@@ -47,9 +59,28 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-success/20 px-2 py-0.5 text-xs text-success">
-            Testnet
-          </span>
+          {ready && authenticated && shortAddress ? (
+            <>
+              <span className="rounded-full bg-primary/10 px-3 py-1 font-mono text-xs text-primary">
+                {shortAddress}
+              </span>
+              <button
+                onClick={logout}
+                className="rounded-md p-1.5 text-muted hover:bg-card hover:text-foreground"
+                title="Disconnect wallet"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={login}
+              disabled={!ready}
+              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-background transition-colors hover:bg-primary/80 disabled:opacity-50"
+            >
+              Connect Wallet
+            </button>
+          )}
         </div>
       </div>
     </header>
