@@ -349,6 +349,37 @@ async def detect_whales(symbol: str, threshold_usd: float = 50000) -> list[Whale
     return sorted(whales, key=lambda w: w.size_usd, reverse=True)
 
 
+# --- Social Sentiment (Elfa AI) ---
+
+
+from services import elfa_client as elfa
+
+
+@app.get("/api/social/trending")
+async def social_trending():
+    """Get trending tokens by social engagement (powered by Elfa AI)."""
+    return await elfa.get_trending_tokens(limit=10)
+
+
+@app.get("/api/social/sentiment/{symbol}")
+async def social_sentiment(symbol: str):
+    """Get social sentiment for a market (powered by Elfa AI)."""
+    cache_key = f"social_sentiment:{symbol}"
+    cached = _cache_get(cache_key, AI_CACHE_TTL)
+    if cached is not None:
+        return cached
+
+    result = await elfa.get_social_sentiment(symbol)
+    _cache_set(cache_key, result)
+    return result
+
+
+@app.get("/api/social/mentions/{keyword}")
+async def social_mentions(keyword: str, limit: int = 20):
+    """Get social mentions for a keyword (powered by Elfa AI)."""
+    return await elfa.get_token_mentions(keyword, limit=limit)
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)

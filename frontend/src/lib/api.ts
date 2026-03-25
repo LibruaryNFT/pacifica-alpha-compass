@@ -216,3 +216,42 @@ export async function fetchWhales(
 ): Promise<WhaleAlert[]> {
   return apiFetch(`/api/whales/${symbol}?threshold_usd=${threshold}`, () => []);
 }
+
+// --- Social Sentiment (Elfa AI) ---
+
+export interface SocialSentiment {
+  symbol: string;
+  token: string;
+  sentiment_score: number;
+  sentiment_label: "bullish" | "bearish" | "neutral";
+  mention_count_24h: number;
+  positive_mentions: number;
+  negative_mentions: number;
+  top_mentions: {
+    text: string;
+    engagement: number;
+    source: string;
+    timestamp: string;
+  }[];
+  source: string;
+}
+
+export async function fetchSocialSentiment(
+  symbol: string
+): Promise<SocialSentiment> {
+  return apiFetch(`/api/social/sentiment/${symbol}`, () => ({
+    symbol,
+    token: symbol.split("-")[0],
+    sentiment_score: 0.5,
+    sentiment_label: "neutral" as const,
+    mention_count_24h: 0,
+    positive_mentions: 0,
+    negative_mentions: 0,
+    top_mentions: [],
+    source: "mock",
+  }));
+}
+
+export async function fetchTrendingTokens(): Promise<unknown[]> {
+  return apiFetch("/api/social/trending", () => []);
+}
