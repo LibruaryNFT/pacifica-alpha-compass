@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, BarChart3, Wallet, Brain, Fish, LogOut } from "lucide-react";
-import { usePrivy } from "@privy-io/react-auth";
+import { Compass, BarChart3, Wallet, Brain, Fish } from "lucide-react";
+import dynamic from "next/dynamic";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
@@ -13,19 +13,18 @@ const NAV_ITEMS = [
   { href: "/whales", label: "Whales", icon: Fish },
 ];
 
+// Load wallet button only on client (needs Privy context)
+const WalletButton = dynamic(() => import("./WalletButton"), {
+  ssr: false,
+  loading: () => (
+    <span className="rounded-lg bg-card px-4 py-1.5 text-sm text-muted">
+      Loading...
+    </span>
+  ),
+});
+
 export default function Header() {
   const pathname = usePathname();
-  const { ready, authenticated, login, logout, user } = usePrivy();
-
-  // Get Solana wallet address if connected
-  const solanaWallet = user?.linkedAccounts?.find(
-    (a): a is Extract<typeof a, { type: "wallet" }> =>
-      a.type === "wallet" && "chainType" in a && a.chainType === "solana"
-  );
-  const walletAddress = solanaWallet && "address" in solanaWallet ? solanaWallet.address : null;
-  const shortAddress = walletAddress
-    ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
-    : null;
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
@@ -58,31 +57,7 @@ export default function Header() {
           })}
         </nav>
 
-        <div className="flex items-center gap-2">
-          {ready && authenticated && shortAddress ? (
-            <>
-              <span className="rounded-full bg-primary/10 px-3 py-1 font-mono text-xs text-primary">
-                {shortAddress}
-              </span>
-              <button
-                onClick={() => { logout(); }}
-                className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:bg-card hover:text-danger"
-                title="Disconnect wallet"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Disconnect</span>
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={login}
-              disabled={!ready}
-              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-background transition-colors hover:bg-primary/80 disabled:opacity-50"
-            >
-              Connect Wallet
-            </button>
-          )}
-        </div>
+        <WalletButton />
       </div>
     </header>
   );
