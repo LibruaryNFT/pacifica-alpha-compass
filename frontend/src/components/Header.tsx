@@ -65,11 +65,12 @@ export default function Header() {
                 {shortAddress}
               </span>
               <button
-                onClick={logout}
-                className="rounded-md p-1.5 text-muted hover:bg-card hover:text-foreground"
+                onClick={() => { logout(); }}
+                className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:bg-card hover:text-danger"
                 title="Disconnect wallet"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Disconnect</span>
               </button>
             </>
           ) : (
