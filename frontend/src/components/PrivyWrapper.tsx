@@ -10,7 +10,7 @@ export default function PrivyWrapper({ children }: { children: React.ReactNode }
         appearance: {
           theme: "dark",
           accentColor: "#22c55e",
-          walletChainType: "solana-only",
+          walletChainType: "ethereum-and-solana",
         },
         loginMethods: ["wallet"],
       }}
