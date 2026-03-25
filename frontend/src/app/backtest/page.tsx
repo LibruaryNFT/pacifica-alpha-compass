@@ -226,7 +226,8 @@ export default function BacktestPage() {
           <div className="rounded-lg border border-dashed border-border bg-card/50 p-4 text-xs text-muted">
             <strong>Methodology:</strong> Alpha Score is computed at each hourly candle using only past data (no future leakage).
             Signals fire when score exceeds 60 (bullish) or drops below 40 (bearish). P&L is measured 4 hours after signal.
-            Results shown are from live Pacifica historical data, not simulated prices.
+            Backtest uses realistic market simulation with mean-reverting trends. Live historical candle data will be used
+            once Pacifica enables their REST candle endpoint.
           </div>
         </>
       )}

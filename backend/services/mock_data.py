@@ -102,15 +102,20 @@ def get_candles(symbol: str, interval: str = "1h", limit: int = 168) -> list[dic
     candles = []
     price = base * (0.95 + random.random() * 0.1)
 
+    # Use seeded random for reproducibility per symbol
+    rng = random.Random(hash(symbol) + 42)
+    trend = 0.0  # Adds trending behavior for realistic backtest
+
     for i in range(limit):
         ts = now - timedelta(minutes=interval_minutes * (limit - i))
-        # Random walk
-        change = (random.random() - 0.48) * vol * 0.3  # slight upward bias
+        # Mean-reverting trend + random walk (produces testable signals)
+        trend = trend * 0.95 + (rng.random() - 0.5) * vol * 0.8
+        change = trend + (rng.random() - 0.5) * vol * 0.3
         open_price = price
         close_price = price * (1 + change)
-        high = max(open_price, close_price) * (1 + random.random() * vol * 0.2)
-        low = min(open_price, close_price) * (1 - random.random() * vol * 0.2)
-        volume = base * random.randint(100, 10000)
+        high = max(open_price, close_price) * (1 + rng.random() * vol * 0.3)
+        low = min(open_price, close_price) * (1 - rng.random() * vol * 0.3)
+        volume = base * rng.randint(50, 15000)
 
         candles.append(
             {
