@@ -25,6 +25,27 @@ logger = logging.getLogger(__name__)
 # Demo mode: use mock data when Pacifica API is unreachable
 DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
 
+# Simple TTL cache for expensive operations
+import time
+
+_cache: dict[str, tuple[float, object]] = {}
+AI_CACHE_TTL = 900  # 15 minutes for AI consensus
+PRICE_CACHE_TTL = 10  # 10 seconds for prices
+
+
+def _cache_get(key: str, ttl: float) -> object | None:
+    """Get from cache if not expired."""
+    if key in _cache:
+        ts, data = _cache[key]
+        if time.time() - ts < ttl:
+            return data
+    return None
+
+
+def _cache_set(key: str, data: object) -> None:
+    """Store in cache with current timestamp."""
+    _cache[key] = (time.time(), data)
+
 
 async def _try_live_or_mock(live_fn, mock_fn, label: str):
     """Try live Pacifica API first, fall back to mock data."""
@@ -241,6 +262,13 @@ async def get_trade_history():
 @app.get("/api/ai/consensus/{symbol}")
 async def ai_consensus(symbol: str) -> ConsensusResult:
     """Run 3 AI models and return consensus analysis for a market."""
+    # Check cache first (AI calls are expensive)
+    cache_key = f"ai_consensus:{symbol}"
+    cached = _cache_get(cache_key, AI_CACHE_TTL)
+    if cached is not None:
+        logger.info(f"AI consensus cache hit for {symbol}")
+        return cached
+
     try:
         # Get market data (live or mock)
         price_data = await _try_live_or_mock(
@@ -276,6 +304,7 @@ async def ai_consensus(symbol: str) -> ConsensusResult:
             high_24h=float(price_data.get("high24h", price_data.get("high", 0))),
             low_24h=float(price_data.get("low24h", price_data.get("low", 0))),
         )
+        _cache_set(cache_key, result)
         return result
 
     except HTTPException:
