@@ -39,12 +39,16 @@ export default function MarketDetailPage() {
   const [orderbook, setOrderbook] = useState<Orderbook | null>(null);
   const [consensus, setConsensus] = useState<ConsensusResult | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [candleInterval, setCandleInterval] = useState("1h");
+
+  const INTERVALS = ["5m", "15m", "1h", "4h", "1d"];
+  const CANDLE_LIMITS: Record<string, number> = { "5m": 144, "15m": 96, "1h": 72, "4h": 48, "1d": 30 };
 
   useEffect(() => {
     const load = async () => {
       const [p, c, ob] = await Promise.all([
         fetchPrice(symbol),
-        fetchCandles(symbol, "1h", 72),
+        fetchCandles(symbol, candleInterval, CANDLE_LIMITS[candleInterval] || 72),
         fetchOrderbook(symbol),
       ]);
       setPrice(p);
@@ -54,7 +58,7 @@ export default function MarketDetailPage() {
     load();
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
-  }, [symbol]);
+  }, [symbol, candleInterval]);
 
   const runAI = async () => {
     setAiLoading(true);
@@ -147,6 +151,21 @@ export default function MarketDetailPage() {
       {/* Chart + Orderbook */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
+          <div className="mb-2 flex items-center gap-1">
+            {INTERVALS.map((iv) => (
+              <button
+                key={iv}
+                onClick={() => setCandleInterval(iv)}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                  candleInterval === iv
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                {iv.toUpperCase()}
+              </button>
+            ))}
+          </div>
           <CandleChart candles={candles} height={400} />
         </div>
         <div>

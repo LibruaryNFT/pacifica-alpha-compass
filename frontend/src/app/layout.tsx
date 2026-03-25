@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import Providers from "@/components/Providers";
 import "./globals.css";
 
@@ -41,6 +42,7 @@ export default function RootLayout({
         <Providers>
           <Header />
           <main className="min-h-screen">{children}</main>
+          <Footer />
         </Providers>
       </body>
     </html>

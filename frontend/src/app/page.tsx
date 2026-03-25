@@ -61,6 +61,15 @@ export default function Dashboard() {
           <p className="mt-1 text-sm text-muted">
             AI-powered trading intelligence for Pacifica DEX
           </p>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-muted">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
+              Live data from Pacifica API
+            </span>
+            <span className="text-xs text-muted">
+              {prices.length > 0 && `${prices.length} markets`}
+            </span>
+          </div>
         </div>
         <button
           onClick={() => router.push("/ai")}
