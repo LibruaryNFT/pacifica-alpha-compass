@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, BarChart3, Wallet, Brain, Fish } from "lucide-react";
+import { Compass, BarChart3, Wallet, Brain, Fish, ArrowRightLeft, Gift, FlaskConical } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const NAV_ITEMS = [
@@ -11,6 +11,9 @@ const NAV_ITEMS = [
   { href: "/scanner", label: "Scanner", icon: Compass },
   { href: "/ai", label: "AI Consensus", icon: Brain },
   { href: "/whales", label: "Whales", icon: Fish },
+  { href: "/bridge", label: "Bridge", icon: ArrowRightLeft },
+  { href: "/referrals", label: "Referrals", icon: Gift },
+  { href: "/testnet", label: "Testnet", icon: FlaskConical },
 ];
 
 // Load wallet button only on client (needs Privy context)

@@ -30,6 +30,12 @@ export default function Footer() {
               <span className="rounded bg-card px-2 py-0.5 text-foreground/70">
                 Privy
               </span>
+              <span className="rounded bg-card px-2 py-0.5 text-foreground/70">
+                Rhino.fi
+              </span>
+              <span className="rounded bg-card px-2 py-0.5 text-foreground/70">
+                Fuul
+              </span>
             </div>
           </div>
 

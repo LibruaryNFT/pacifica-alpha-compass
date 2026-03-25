@@ -20,7 +20,8 @@ import {
   type PortfolioSummary,
   type FundingScanResult,
 } from "@/lib/api";
-import { REFRESH_INTERVALS } from "@/lib/constants";
+import { REFRESH_INTERVALS, TOP_MARKETS } from "@/lib/constants";
+import { usePacificaWebSocket } from "@/hooks/useWebSocket";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -28,6 +29,23 @@ export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
   const [funding, setFunding] = useState<FundingScanResult | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // WebSocket for real-time price flashes
+  const { lastTrades, connected: wsConnected } = usePacificaWebSocket([...TOP_MARKETS]);
+
+  // Update prices with WebSocket data
+  useEffect(() => {
+    if (Object.keys(lastTrades).length === 0) return;
+    setPrices((prev) =>
+      prev.map((p) => {
+        const trade = lastTrades[p.symbol];
+        if (trade && trade.price) {
+          return { ...p, price: parseFloat(String(trade.price)) };
+        }
+        return p;
+      })
+    );
+  }, [lastTrades]);
 
   const loadData = useCallback(async () => {
     const [p, port, fund] = await Promise.all([
@@ -63,8 +81,8 @@ export default function Dashboard() {
           </p>
           <div className="mt-2 flex items-center gap-2">
             <span className="flex items-center gap-1.5 text-xs text-muted">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
-              Live data from Pacifica API
+              <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-success animate-pulse" : "bg-warning"}`} />
+              {wsConnected ? "Live WebSocket" : "REST polling"}
             </span>
             <span className="text-xs text-muted">
               {prices.length > 0 && `${prices.length} markets`}
