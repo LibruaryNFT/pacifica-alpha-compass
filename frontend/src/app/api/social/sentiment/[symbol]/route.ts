@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://89.167.70.176:8002";
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || "";
 
 export async function GET(
   request: NextRequest,
@@ -10,7 +11,10 @@ export async function GET(
 
   try {
     const response = await fetch(`${BACKEND_URL}/api/social/sentiment/${symbol}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-key": INTERNAL_API_KEY,
+      },
       next: { revalidate: 0 },
     });
 

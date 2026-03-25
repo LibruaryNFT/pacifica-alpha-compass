@@ -7,7 +7,7 @@ from datetime import datetime
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from schemas import ConsensusResult, FundingScanResult, PortfolioSummary, WhaleAlert
 from services import mock_data
@@ -15,6 +15,9 @@ from services import pacifica_client as pac
 from services.ai_consensus import get_consensus
 
 load_dotenv()
+
+# Internal API key — only Vercel proxy knows this
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,8 +32,8 @@ DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
 import time
 
 _cache: dict[str, tuple[float, object]] = {}
-AI_CACHE_TTL = 900  # 15 minutes for AI consensus
-PRICE_CACHE_TTL = 10  # 10 seconds for prices
+AI_CACHE_TTL = 3600  # 1 hour for AI consensus (hackathon — minimize API costs)
+PRICE_CACHE_TTL = 30  # 30 seconds for prices
 
 
 def _cache_get(key: str, ttl: float) -> object | None:
@@ -259,8 +262,17 @@ async def get_trade_history():
 # --- AI Consensus ---
 
 
+from fastapi import Header
+
+
+def verify_api_key(x_internal_key: str = Header(default="")):
+    """Verify internal API key for expensive endpoints."""
+    if INTERNAL_API_KEY and x_internal_key != INTERNAL_API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
 @app.get("/api/ai/consensus/{symbol}")
-async def ai_consensus(symbol: str) -> ConsensusResult:
+async def ai_consensus(symbol: str, _: None = Depends(verify_api_key)) -> ConsensusResult:
     """Run 3 AI models and return consensus analysis for a market."""
     # Check cache first (AI calls are expensive)
     cache_key = f"ai_consensus:{symbol}"
@@ -356,13 +368,13 @@ from services import elfa_client as elfa
 
 
 @app.get("/api/social/trending")
-async def social_trending():
+async def social_trending(_: None = Depends(verify_api_key)):
     """Get trending tokens by social engagement (powered by Elfa AI)."""
     return await elfa.get_trending_tokens(limit=10)
 
 
 @app.get("/api/social/sentiment/{symbol}")
-async def social_sentiment(symbol: str):
+async def social_sentiment(symbol: str, _: None = Depends(verify_api_key)):
     """Get social sentiment for a market (powered by Elfa AI)."""
     cache_key = f"social_sentiment:{symbol}"
     cached = _cache_get(cache_key, AI_CACHE_TTL)
