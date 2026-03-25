@@ -1,4 +1,9 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Backend API (only for AI consensus + social sentiment — endpoints that need server-side API keys)
+export const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
+
+// Pacifica API (called directly from browser — no auth needed for public endpoints)
+export const PACIFICA_API = "https://api.pacifica.fi/api/v1";
+export const PACIFICA_TESTNET_API = "https://test-api.pacifica.fi/api/v1";
 
 export const REFRESH_INTERVALS = {
   PRICES: 5000,       // 5s for real-time prices

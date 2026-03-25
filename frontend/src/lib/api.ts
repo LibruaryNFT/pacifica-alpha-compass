@@ -1,4 +1,4 @@
-import { API_URL } from "./constants";
+import { BACKEND_URL, PACIFICA_API } from "./constants";
 
 // --- Types ---
 
@@ -81,17 +81,29 @@ export interface WhaleAlert {
   alert_type: string;
 }
 
-// --- Mock Data (demo fallback) ---
+export interface SocialSentiment {
+  symbol: string;
+  token: string;
+  sentiment_score: number;
+  sentiment_label: "bullish" | "bearish" | "neutral";
+  mention_count_24h: number;
+  positive_mentions: number;
+  negative_mentions: number;
+  top_mentions: {
+    text: string;
+    engagement: number;
+    source: string;
+    timestamp: string;
+  }[];
+  source: string;
+}
+
+// --- Mock Data (fallback when APIs fail) ---
 
 const MOCK_PRICES: Record<string, number> = {
-  "BTC-USDC": 67240,
-  "ETH-USDC": 3412,
-  "SOL-USDC": 182.45,
-  "DOGE-USDC": 0.168,
-  "ARB-USDC": 1.24,
-  "AVAX-USDC": 38.90,
-  "LINK-USDC": 14.82,
-  "OP-USDC": 2.65,
+  "BTC-USDC": 67240, "ETH-USDC": 3412, "SOL-USDC": 182.45,
+  "DOGE-USDC": 0.168, "ARB-USDC": 1.24, "AVAX-USDC": 38.90,
+  "LINK-USDC": 14.82, "OP-USDC": 2.65,
 };
 
 function mockPrices(): MarketPrice[] {
@@ -114,91 +126,150 @@ function mockPortfolio(): PortfolioSummary {
     total_margin_used: 1641.67,
     available_balance: 7500,
     positions: [
-      {
-        symbol: "SOL-USDC",
-        side: "long",
-        size: 50,
-        entry_price: 175.20,
-        mark_price: 182.45,
-        unrealized_pnl: 362.50,
-        realized_pnl: 0,
-        leverage: 5,
-        liquidation_price: 148.16,
-        margin: 500,
-      },
-      {
-        symbol: "BTC-USDC",
-        side: "short",
-        size: 0.05,
-        entry_price: 68500,
-        mark_price: 67240,
-        unrealized_pnl: 63,
-        realized_pnl: 0,
-        leverage: 3,
-        liquidation_price: 89200,
-        margin: 1141.67,
-      },
+      { symbol: "SOL-USDC", side: "long", size: 50, entry_price: 175.20, mark_price: 182.45, unrealized_pnl: 362.50, realized_pnl: 0, leverage: 5, liquidation_price: 148.16, margin: 500 },
+      { symbol: "BTC-USDC", side: "short", size: 0.05, entry_price: 68500, mark_price: 67240, unrealized_pnl: 63, realized_pnl: 0, leverage: 3, liquidation_price: 89200, margin: 1141.67 },
     ],
     portfolio_heat: 16.4,
   };
 }
 
-// --- API Functions ---
+// --- Fetch helpers ---
 
-async function apiFetch<T>(endpoint: string, fallback: () => T): Promise<T> {
+async function pacificaFetch<T>(path: string, fallback: () => T): Promise<T> {
   try {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const response = await fetch(`${PACIFICA_API}${path}`);
+    if (!response.ok) throw new Error(`Pacifica API error: ${response.status}`);
     return await response.json();
   } catch (error) {
-    console.warn(`API fetch failed for ${endpoint}, using mock:`, error);
+    console.warn(`Pacifica API failed for ${path}, using mock:`, error);
     return fallback();
   }
 }
 
+async function backendFetch<T>(path: string, fallback: () => T): Promise<T> {
+  try {
+    const response = await fetch(`${BACKEND_URL}${path}`);
+    if (!response.ok) throw new Error(`Backend error: ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    console.warn(`Backend failed for ${path}, using mock:`, error);
+    return fallback();
+  }
+}
+
+// --- Pacifica Direct (public market data — no auth needed) ---
+
 export async function fetchPrices(): Promise<MarketPrice[]> {
-  return apiFetch("/api/prices", mockPrices);
+  const data = await pacificaFetch<unknown>("/market-price", () => mockPrices() as unknown);
+  // Normalize Pacifica response format to our interface
+  if (Array.isArray(data)) {
+    return (data as Record<string, unknown>[]).map(normalizePrice);
+  }
+  const rec = data as Record<string, unknown>;
+  const list = (rec.data ?? rec.prices ?? []) as Record<string, unknown>[];
+  return list.map(normalizePrice);
 }
 
 export async function fetchPrice(symbol: string): Promise<MarketPrice> {
-  return apiFetch(`/api/price/${symbol}`, () => ({
-    symbol,
-    price: MOCK_PRICES[symbol] || 100,
-    change24h: (Math.random() - 0.5) * 8,
-    volume24h: Math.random() * 1e8,
-    high24h: (MOCK_PRICES[symbol] || 100) * 1.03,
-    low24h: (MOCK_PRICES[symbol] || 100) * 0.97,
+  const data = await pacificaFetch(`/market-price?symbol=${symbol}`, () => ({
+    symbol, price: MOCK_PRICES[symbol] || 100,
+    change24h: 0, volume24h: 0, high24h: 0, low24h: 0,
   }));
+  return normalizePrice(data as Record<string, unknown>);
 }
 
 export async function fetchCandles(
-  symbol: string,
-  interval = "1h",
-  limit = 168
+  symbol: string, interval = "1h", limit = 168
 ): Promise<unknown[]> {
-  return apiFetch(`/api/candles/${symbol}?interval=${interval}&limit=${limit}`, () => []);
+  return pacificaFetch(`/candles?symbol=${symbol}&interval=${interval}&limit=${limit}`, () => []);
 }
 
 export async function fetchOrderbook(symbol: string): Promise<unknown> {
-  return apiFetch(`/api/orderbook/${symbol}`, () => ({ bids: [], asks: [] }));
+  return pacificaFetch(`/orderbook?symbol=${symbol}&limit=20`, () => ({ bids: [], asks: [] }));
 }
 
-export async function fetchPortfolio(): Promise<PortfolioSummary> {
-  return apiFetch("/api/portfolio", mockPortfolio);
+export async function fetchFundingRate(symbol: string): Promise<unknown> {
+  return pacificaFetch(`/funding-rate?symbol=${symbol}`, () => ({ symbol, rate: 0 }));
 }
 
+export async function fetchRecentTrades(symbol: string, limit = 50): Promise<unknown[]> {
+  return pacificaFetch(`/trades?symbol=${symbol}&limit=${limit}`, () => []);
+}
+
+// Funding scan: fetch all funding rates and compute opportunities client-side
 export async function fetchFundingScan(): Promise<FundingScanResult> {
-  return apiFetch("/api/funding-scan", () => ({
-    opportunities: [],
-    average_rate: 0,
-  }));
+  try {
+    const rates = await pacificaFetch<unknown[]>("/funding-rate", () => []);
+    if (!Array.isArray(rates) || rates.length === 0) {
+      return { opportunities: [], average_rate: 0 };
+    }
+
+    const parsed = rates.map((r: unknown) => {
+      const rec = r as Record<string, unknown>;
+      return {
+        symbol: String(rec.symbol || "?"),
+        rate: Number(rec.fundingRate ?? rec.rate ?? 0),
+      };
+    });
+
+    const sorted = [...parsed].sort((a, b) => a.rate - b.rate);
+    const avg = parsed.reduce((s, r) => s + r.rate, 0) / parsed.length;
+
+    const opportunities: FundingOpportunity[] = parsed
+      .filter((r) => Math.abs(r.rate) > 0.01)
+      .map((r) => ({
+        symbol: r.symbol,
+        rate: r.rate,
+        type: r.rate > 0 ? "high_positive" : "high_negative",
+        annualized: r.rate * 3 * 365,
+      }));
+
+    return {
+      opportunities,
+      highest_positive: sorted.length ? { symbol: sorted[sorted.length - 1].symbol, rate: sorted[sorted.length - 1].rate } : undefined,
+      most_negative: sorted.length ? { symbol: sorted[0].symbol, rate: sorted[0].rate } : undefined,
+      average_rate: avg,
+    };
+  } catch {
+    return { opportunities: [], average_rate: 0 };
+  }
 }
+
+// Whale detection: fetch recent trades and filter large ones client-side
+export async function fetchWhales(symbol: string, threshold = 50000): Promise<WhaleAlert[]> {
+  try {
+    const trades = await fetchRecentTrades(symbol, 100);
+    const whales: WhaleAlert[] = [];
+    for (const t of trades as Record<string, unknown>[]) {
+      const size = Number(t.size ?? t.qty ?? 0);
+      const price = Number(t.price ?? 0);
+      const usd = size * price;
+      if (usd >= threshold) {
+        whales.push({
+          symbol,
+          side: String(t.side ?? "unknown"),
+          size_usd: Math.round(usd * 100) / 100,
+          price,
+          timestamp: String(t.timestamp ?? t.time ?? new Date().toISOString()),
+          alert_type: "large_trade",
+        });
+      }
+    }
+    return whales.sort((a, b) => b.size_usd - a.size_usd);
+  } catch {
+    return [];
+  }
+}
+
+// Portfolio: mock for now (needs wallet auth to be real)
+export async function fetchPortfolio(): Promise<PortfolioSummary> {
+  return mockPortfolio();
+}
+
+// --- Backend Only (AI + Social — needs server-side API keys) ---
 
 export async function fetchConsensus(symbol: string): Promise<ConsensusResult> {
-  return apiFetch(`/api/ai/consensus/${symbol}`, () => ({
+  return backendFetch(`/api/ai/consensus/${symbol}`, () => ({
     symbol,
     direction: "neutral" as const,
     confidence: 0,
@@ -210,36 +281,8 @@ export async function fetchConsensus(symbol: string): Promise<ConsensusResult> {
   }));
 }
 
-export async function fetchWhales(
-  symbol: string,
-  threshold = 50000
-): Promise<WhaleAlert[]> {
-  return apiFetch(`/api/whales/${symbol}?threshold_usd=${threshold}`, () => []);
-}
-
-// --- Social Sentiment (Elfa AI) ---
-
-export interface SocialSentiment {
-  symbol: string;
-  token: string;
-  sentiment_score: number;
-  sentiment_label: "bullish" | "bearish" | "neutral";
-  mention_count_24h: number;
-  positive_mentions: number;
-  negative_mentions: number;
-  top_mentions: {
-    text: string;
-    engagement: number;
-    source: string;
-    timestamp: string;
-  }[];
-  source: string;
-}
-
-export async function fetchSocialSentiment(
-  symbol: string
-): Promise<SocialSentiment> {
-  return apiFetch(`/api/social/sentiment/${symbol}`, () => ({
+export async function fetchSocialSentiment(symbol: string): Promise<SocialSentiment> {
+  return backendFetch(`/api/social/sentiment/${symbol}`, () => ({
     symbol,
     token: symbol.split("-")[0],
     sentiment_score: 0.5,
@@ -253,5 +296,20 @@ export async function fetchSocialSentiment(
 }
 
 export async function fetchTrendingTokens(): Promise<unknown[]> {
-  return apiFetch("/api/social/trending", () => []);
+  return backendFetch("/api/social/trending", () => []);
+}
+
+// --- Helpers ---
+
+function normalizePrice(raw: Record<string, unknown>): MarketPrice {
+  return {
+    symbol: String(raw.symbol || ""),
+    price: Number(raw.price ?? raw.markPrice ?? raw.lastPrice ?? 0),
+    change24h: Number(raw.change24h ?? raw.priceChange24h ?? 0),
+    volume24h: Number(raw.volume24h ?? raw.volume ?? 0),
+    high24h: Number(raw.high24h ?? raw.high ?? 0),
+    low24h: Number(raw.low24h ?? raw.low ?? 0),
+    fundingRate: raw.fundingRate != null ? Number(raw.fundingRate) : undefined,
+    openInterest: raw.openInterest != null ? Number(raw.openInterest) : undefined,
+  };
 }
