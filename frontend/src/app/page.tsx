@@ -16,6 +16,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import PriceCard from "@/components/PriceCard";
+import Tooltip from "@/components/Tooltip";
 import {
   fetchPrices,
   fetchPortfolio,
@@ -164,6 +165,7 @@ export default function Dashboard() {
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <Zap className="h-5 w-5 text-yellow-400" />
             Alpha Scores
+            <Tooltip text="Proprietary 0-100 composite score from 5 signals: momentum, volatility, funding rates, volume, and orderbook depth. Higher = more bullish." />
           </h2>
           <button
             onClick={() => router.push("/alpha")}
@@ -253,7 +255,10 @@ export default function Dashboard() {
       {/* Funding opportunities */}
       {funding && funding.opportunities.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-semibold">Funding Opportunities</h2>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+            Funding Opportunities
+            <Tooltip text="Funding rates are periodic payments between long and short traders. When rates are extreme, it signals overcrowding — a contrarian trading opportunity." />
+          </h2>
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm">
               <thead>
