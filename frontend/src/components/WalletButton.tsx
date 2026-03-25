@@ -26,6 +26,9 @@ export default function WalletButton() {
   if (authenticated && shortAddress) {
     return (
       <div className="flex items-center gap-2">
+        <span className="rounded bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">
+          Demo
+        </span>
         <span className="rounded-full bg-primary/10 px-3 py-1 font-mono text-xs text-primary">
           {shortAddress}
         </span>

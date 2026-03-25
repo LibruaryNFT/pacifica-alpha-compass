@@ -32,10 +32,15 @@ export default function PortfolioPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
-      <h1 className="text-2xl font-bold">
-        <Wallet className="mr-2 inline h-6 w-6 text-accent" />
-        Portfolio
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">
+          <Wallet className="mr-2 inline h-6 w-6 text-accent" />
+          Portfolio
+        </h1>
+        <span className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-1 text-xs text-warning">
+          Demo Mode — simulated positions for hackathon
+        </span>
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
