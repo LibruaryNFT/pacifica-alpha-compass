@@ -186,7 +186,14 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* Portfolio summary */}
+      {/* Portfolio summary (simulated) */}
+      {portfolio && (
+        <div className="relative">
+          <span className="absolute -top-2 right-2 z-10 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-bold text-accent">
+            SIM
+          </span>
+        </div>
+      )}
       {portfolio && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <StatCard
@@ -282,7 +289,10 @@ export default function Dashboard() {
       {/* Positions */}
       {portfolio && portfolio.positions.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-semibold">Open Positions</h2>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+            Open Positions
+            <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-bold text-accent">SIM</span>
+          </h2>
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm">
               <thead>

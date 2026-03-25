@@ -32,14 +32,33 @@ export default function PortfolioPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
-      <div className="flex items-center justify-between">
+      <div>
         <h1 className="text-2xl font-bold">
           <Wallet className="mr-2 inline h-6 w-6 text-accent" />
           Portfolio
         </h1>
-        <span className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-1 text-xs text-warning">
-          Demo Mode — simulated positions for hackathon
-        </span>
+      </div>
+
+      {/* Simulated data banner */}
+      <div className="flex items-start gap-3 rounded-lg border border-accent/20 bg-accent/5 p-4">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-xs font-bold text-accent">
+          SIM
+        </div>
+        <div>
+          <p className="text-sm font-medium">Simulated Portfolio</p>
+          <p className="mt-0.5 text-xs text-muted">
+            This demo shows sample trading data to illustrate the full portfolio tracking experience.
+            Connect your Pacifica account with API Agent Keys to view real positions and P&L.
+          </p>
+          <a
+            href="https://test-app.pacifica.fi"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            Open Pacifica to trade
+          </a>
+        </div>
       </div>
 
       {/* Summary cards */}
