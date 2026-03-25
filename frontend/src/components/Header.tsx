@@ -15,6 +15,7 @@ import {
   Zap,
   Menu,
   X,
+  Layers,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -31,6 +32,7 @@ const SECONDARY_NAV = [
   { href: "/bridge", label: "Bridge", icon: ArrowRightLeft },
   { href: "/referrals", label: "Referrals", icon: Gift },
   { href: "/testnet", label: "Testnet", icon: FlaskConical },
+  { href: "/architecture", label: "Architecture", icon: Layers },
 ];
 
 const WalletButton = dynamic(() => import("./WalletButton"), {

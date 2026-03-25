@@ -42,77 +42,88 @@ def _get_groq() -> AsyncOpenAI:
     return _groq
 
 
-RISK_PROMPT = """You are a risk analyst evaluating a perpetual futures market.
+RISK_PROMPT = """You are a risk analyst evaluating a perpetual futures market on Pacifica DEX.
 
-Analyze the following market data and provide a risk assessment.
+MARKET DATA:
+- Symbol: {symbol}
+- Price: ${price}
+- 24h Change: {change_24h}%
+- Funding Rate: {funding_rate}% (positive = longs pay shorts)
+- Orderbook Imbalance: {ob_imbalance}
 
-Market: {symbol}
-Current Price: {price}
-24h Change: {change_24h}%
-Funding Rate: {funding_rate}%
-Recent Candles (last 24h OHLCV): {candles}
-Orderbook Imbalance: {ob_imbalance}
+ALPHA SCORE SIGNALS (our proprietary quantitative analysis):
+{alpha_signals}
 
-Respond in JSON format:
+LIQUIDATION RISK ASSESSMENT:
+{liq_risk}
+
+Your job: evaluate the RISK side. Are traders in danger? Is leverage too high?
+Consider the Alpha Score signals as quantitative evidence — agree or disagree with them.
+
+Respond in JSON:
 {{
     "direction": "bullish" | "bearish" | "neutral",
     "confidence": 0.0-1.0,
     "score": 0.0-10.0 (10 = extremely bullish),
-    "reasoning": "2-3 sentence explanation",
+    "reasoning": "2-3 sentences referencing specific signals",
     "key_factors": ["factor1", "factor2", "factor3"]
-}}
-
-Focus on: liquidation risk, funding rate sustainability, leverage concentration,
-and whether current conditions are dangerous for traders."""
+}}"""
 
 
-SENTIMENT_PROMPT = """You are a market sentiment analyst for crypto perpetual futures.
+SENTIMENT_PROMPT = """You are a market sentiment analyst for crypto perpetual futures on Pacifica DEX.
 
-Analyze the following market data and determine the prevailing sentiment.
+MARKET DATA:
+- Symbol: {symbol}
+- Price: ${price}
+- 24h Change: {change_24h}%
+- 24h Volume: ${volume_24h}
+- Funding Rate: {funding_rate}%
 
-Market: {symbol}
-Current Price: {price}
-24h Change: {change_24h}%
-24h Volume: {volume_24h}
-Funding Rate: {funding_rate}%
-Recent Candles (last 24h OHLCV): {candles}
-Recent Trades (last 20): {recent_trades}
+ALPHA SCORE SIGNALS (our proprietary quantitative analysis):
+{alpha_signals}
 
-Respond in JSON format:
+FUNDING RATE PREDICTION:
+{funding_prediction}
+
+Your job: evaluate SENTIMENT. Is the crowd positioned wrong? Is there fear or greed?
+Consider the Alpha Score signals and funding prediction as evidence — agree or disagree.
+
+Respond in JSON:
 {{
     "direction": "bullish" | "bearish" | "neutral",
     "confidence": 0.0-1.0,
     "score": 0.0-10.0 (10 = extremely bullish),
-    "reasoning": "2-3 sentence explanation",
+    "reasoning": "2-3 sentences referencing specific signals",
     "key_factors": ["factor1", "factor2", "factor3"]
-}}
-
-Focus on: volume trends, buyer/seller aggression, funding rate sentiment,
-and whether the market is showing conviction or indecision."""
+}}"""
 
 
-TECHNICAL_PROMPT = """You are a technical analyst specializing in crypto perpetual futures.
+TECHNICAL_PROMPT = """You are a technical analyst specializing in crypto perpetual futures on Pacifica DEX.
 
-Analyze the following market data and provide a technical outlook.
+MARKET DATA:
+- Symbol: {symbol}
+- Price: ${price}
+- 24h High: ${high_24h}
+- 24h Low: ${low_24h}
+- Funding Rate: {funding_rate}%
 
-Market: {symbol}
-Current Price: {price}
-24h High: {high_24h}
-24h Low: {low_24h}
-Funding Rate: {funding_rate}%
-Recent Candles (last 7 days, hourly OHLCV): {candles}
+ALPHA SCORE SIGNALS (our proprietary quantitative analysis):
+{alpha_signals}
 
-Respond in JSON format:
+TRADE SUGGESTION FROM ALPHA SCORE:
+{trade_suggestion}
+
+Your job: evaluate the TECHNICAL picture. Do support/resistance levels confirm the Alpha Score?
+Consider the quantitative signals as evidence — agree or challenge them with your own TA.
+
+Respond in JSON:
 {{
     "direction": "bullish" | "bearish" | "neutral",
     "confidence": 0.0-1.0,
     "score": 0.0-10.0 (10 = extremely bullish),
-    "reasoning": "2-3 sentence explanation",
+    "reasoning": "2-3 sentences referencing specific signals and price levels",
     "key_factors": ["factor1", "factor2", "factor3"]
-}}
-
-Focus on: support/resistance levels, momentum, trend structure,
-volume profile, and key price levels to watch."""
+}}"""
 
 
 def _parse_ai_response(text: str) -> dict:
@@ -298,28 +309,69 @@ async def get_consensus(
 ) -> ConsensusResult:
     """Run 3 AI models in parallel and return weighted consensus."""
 
-    # Prepare market data for prompts
-    candle_summary = json.dumps(candles[-24:] if len(candles) > 24 else candles)
+    # Compute Alpha Score first — feeds quantitative signals into AI prompts
+    from services.alpha_score import compute_alpha_score
+
+    alpha = compute_alpha_score(
+        symbol=symbol,
+        price=price,
+        candles=candles,
+        orderbook=orderbook or {"bids": [], "asks": []},
+        funding_rate=funding_rate,
+        change_24h=change_24h,
+        volume_24h=volume_24h,
+    )
+
+    alpha_signals = "\n".join(
+        f"- {s.name.upper()}: {s.description} (signal: {s.value:+.2f}, weight: {s.weight * 100:.0f}%)"
+        for s in alpha.signals
+    )
+    alpha_signals += (
+        f"\n- COMPOSITE: Alpha Score {alpha.alpha_score:.0f}/100 ({alpha.direction.upper()}, {alpha.regime} regime)"
+    )
+
+    liq_risk_str = "N/A"
+    if alpha.liquidation_risk:
+        lr = alpha.liquidation_risk
+        liq_risk_str = f"Risk: {lr.risk_level.upper()} ({lr.risk_score:.0f}/100), Cluster: {lr.nearest_cluster_distance:.1f}% {lr.cascade_direction}"
+
+    funding_pred_str = "N/A"
+    if alpha.funding_prediction:
+        fp = alpha.funding_prediction
+        funding_pred_str = f"Now: {fp.current_rate * 100:.4f}%, 1h: {fp.predicted_rate_1h * 100:.4f}%, 4h: {fp.predicted_rate_4h * 100:.4f}%, Arb APR: {fp.arbitrage_apr:.0f}%"
+
+    trade_sugg_str = "N/A"
+    if alpha.trade_suggestion:
+        ts = alpha.trade_suggestion
+        trade_sugg_str = f"{ts.action.upper()} | Entry: {ts.entry_zone} | Target: {ts.target} | Stop: {ts.stop_loss} | R:R 1:{ts.risk_reward}"
+
     ob_imbalance = "N/A"
     if orderbook:
-        bids = sum(float(b[1]) for b in orderbook.get("bids", [])[:10])
-        asks = sum(float(a[1]) for a in orderbook.get("asks", [])[:10])
-        if bids + asks > 0:
-            ob_imbalance = f"{bids / (bids + asks):.1%} buy / {asks / (bids + asks):.1%} sell"
-
-    trade_summary = json.dumps((recent_trades or [])[:20])
+        bids_list = orderbook.get("bids", [])
+        asks_list = orderbook.get("asks", [])
+        if bids_list and asks_list:
+            bids_total = sum(
+                float(b[1]) if isinstance(b, (list, tuple)) else float(b.get("size", 0)) for b in bids_list[:10]
+            )
+            asks_total = sum(
+                float(a[1]) if isinstance(a, (list, tuple)) else float(a.get("size", 0)) for a in asks_list[:10]
+            )
+            if bids_total + asks_total > 0:
+                ob_imbalance = f"{bids_total / (bids_total + asks_total):.1%} buy / {asks_total / (bids_total + asks_total):.1%} sell"
 
     market_data = {
         "symbol": symbol,
-        "price": price,
-        "change_24h": change_24h,
-        "funding_rate": funding_rate,
-        "candles": candle_summary,
+        "price": f"{price:,.2f}",
+        "change_24h": f"{change_24h:.2f}",
+        "funding_rate": f"{funding_rate * 100:.4f}",
         "ob_imbalance": ob_imbalance,
-        "volume_24h": volume_24h,
-        "high_24h": high_24h,
-        "low_24h": low_24h,
-        "recent_trades": trade_summary,
+        "volume_24h": f"{volume_24h:,.0f}",
+        "high_24h": f"{high_24h:,.2f}",
+        "low_24h": f"{low_24h:,.2f}",
+        "alpha_signals": alpha_signals,
+        "liq_risk": liq_risk_str,
+        "funding_prediction": funding_pred_str,
+        "trade_suggestion": trade_sugg_str,
     }
 
     # Run 3 models in parallel
