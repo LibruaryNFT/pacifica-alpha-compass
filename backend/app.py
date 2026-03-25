@@ -13,6 +13,7 @@ from schemas import ConsensusResult, FundingScanResult, PortfolioSummary, WhaleA
 from services import mock_data
 from services import pacifica_client as pac
 from services.ai_consensus import get_consensus
+from services.alpha_score import compute_alpha_score
 
 load_dotenv()
 
@@ -359,6 +360,66 @@ async def detect_whales(symbol: str, threshold_usd: float = 50000) -> list[Whale
             )
 
     return sorted(whales, key=lambda w: w.size_usd, reverse=True)
+
+
+# --- Alpha Score (Proprietary) ---
+
+
+@app.get("/api/alpha-score/{symbol}")
+async def alpha_score(symbol: str, _: None = Depends(verify_api_key)):
+    """Compute proprietary Alpha Score for a market."""
+    cache_key = f"alpha_score:{symbol}"
+    cached = _cache_get(cache_key, AI_CACHE_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        price_data = await _try_live_or_mock(
+            lambda: pac.get_market_price(symbol),
+            lambda: mock_data.get_price(symbol),
+            f"alpha-price/{symbol}",
+        )
+        candles = await _try_live_or_mock(
+            lambda: pac.get_historical_candles(symbol, "1h", 168),
+            lambda: mock_data.get_candles(symbol, "1h", 168),
+            f"alpha-candles/{symbol}",
+        )
+        orderbook_data = await _try_live_or_mock(
+            lambda: pac.get_orderbook(symbol, 20),
+            lambda: mock_data.get_orderbook(symbol, 20),
+            f"alpha-ob/{symbol}",
+        )
+
+        price = float(price_data.get("price", price_data.get("markPrice", price_data.get("lastPrice", 0))))
+        funding = float(price_data.get("fundingRate", 0))
+        change = float(price_data.get("change24h", price_data.get("priceChange24h", 0)))
+        volume = float(price_data.get("volume24h", price_data.get("volume", 0)))
+        oi = float(price_data.get("openInterest", 0))
+
+        candle_list = candles if isinstance(candles, list) else candles.get("data", [])
+
+        result = compute_alpha_score(
+            symbol=symbol,
+            price=price,
+            candles=candle_list,
+            orderbook=orderbook_data if isinstance(orderbook_data, dict) else {"bids": [], "asks": []},
+            funding_rate=funding,
+            change_24h=change,
+            volume_24h=volume,
+            open_interest=oi,
+        )
+
+        # Convert dataclass to dict for JSON serialization
+
+        import dataclasses as dc
+
+        result_dict = dc.asdict(result)
+        _cache_set(cache_key, result_dict)
+        return result_dict
+
+    except Exception as e:
+        logger.error(f"Alpha Score failed for {symbol}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Alpha Score failed: {e}")
 
 
 # --- Social Sentiment (Elfa AI) ---

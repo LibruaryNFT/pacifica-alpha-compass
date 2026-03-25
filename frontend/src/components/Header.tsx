@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, BarChart3, Wallet, Brain, Fish, ArrowRightLeft, Gift, FlaskConical } from "lucide-react";
+import { Compass, BarChart3, Wallet, Brain, Fish, ArrowRightLeft, Gift, FlaskConical, Zap } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
   { href: "/portfolio", label: "Portfolio", icon: Wallet },
   { href: "/scanner", label: "Scanner", icon: Compass },
+  { href: "/alpha", label: "Alpha Score", icon: Zap },
   { href: "/ai", label: "AI Consensus", icon: Brain },
   { href: "/whales", label: "Whales", icon: Fish },
   { href: "/bridge", label: "Bridge", icon: ArrowRightLeft },
