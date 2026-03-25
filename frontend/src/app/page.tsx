@@ -27,6 +27,7 @@ import {
 } from "@/lib/api";
 import { REFRESH_INTERVALS, TOP_MARKETS } from "@/lib/constants";
 import { usePacificaWebSocket } from "@/hooks/useWebSocket";
+import type { Trade } from "@/hooks/useWebSocket";
 
 interface AlphaScoreData {
   symbol: string;
@@ -62,15 +63,15 @@ export default function Dashboard() {
   const [alphaScores, setAlphaScores] = useState<Record<string, AlphaScoreData>>({});
   const [alphaLoading, setAlphaLoading] = useState(false);
 
-  const { lastTrades, connected: wsConnected } = usePacificaWebSocket([...TOP_MARKETS]);
+  const { lastTrades, connected: wsConnected } = usePacificaWebSocket();
 
   useEffect(() => {
     if (Object.keys(lastTrades).length === 0) return;
     setPrices((prev) =>
       prev.map((p) => {
-        const trade = lastTrades[p.symbol];
-        if (trade && trade.price) {
-          return { ...p, price: parseFloat(String(trade.price)) };
+        const trade: Trade | undefined = lastTrades[p.symbol];
+        if (trade && trade.price > 0) {
+          return { ...p, price: trade.price };
         }
         return p;
       })
