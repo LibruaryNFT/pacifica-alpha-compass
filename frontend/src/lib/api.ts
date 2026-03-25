@@ -1,4 +1,4 @@
-import { BACKEND_URL, PACIFICA_API } from "./constants";
+import { PACIFICA_API } from "./constants";
 
 // --- Types ---
 
@@ -146,16 +146,7 @@ async function pacificaFetch<T>(path: string, fallback: () => T): Promise<T> {
   }
 }
 
-async function backendFetch<T>(path: string, fallback: () => T): Promise<T> {
-  try {
-    const response = await fetch(`${BACKEND_URL}${path}`);
-    if (!response.ok) throw new Error(`Backend error: ${response.status}`);
-    return await response.json();
-  } catch (error) {
-    console.warn(`Backend failed for ${path}, using mock:`, error);
-    return fallback();
-  }
-}
+// backendFetch removed — backend calls now go through Next.js API proxy routes
 
 // --- Pacifica Direct (public market data — no auth needed) ---
 
@@ -266,37 +257,57 @@ export async function fetchPortfolio(): Promise<PortfolioSummary> {
   return mockPortfolio();
 }
 
-// --- Backend Only (AI + Social — needs server-side API keys) ---
+// --- Backend via Next.js API proxy (avoids HTTPS mixed content) ---
 
 export async function fetchConsensus(symbol: string): Promise<ConsensusResult> {
-  return backendFetch(`/api/ai/consensus/${symbol}`, () => ({
-    symbol,
-    direction: "neutral" as const,
-    confidence: 0,
-    overall_score: 5,
-    regime: "ranging" as const,
-    summary: "AI analysis unavailable — connect backend to enable",
-    analyses: [],
-    timestamp: new Date().toISOString(),
-  }));
+  try {
+    const response = await fetch(`/api/ai/consensus/${symbol}`);
+    if (!response.ok) throw new Error(`Proxy error: ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    console.warn("AI consensus failed:", error);
+    return {
+      symbol,
+      direction: "neutral" as const,
+      confidence: 0,
+      overall_score: 5,
+      regime: "ranging" as const,
+      summary: "AI analysis unavailable — backend unreachable",
+      analyses: [],
+      timestamp: new Date().toISOString(),
+    };
+  }
 }
 
 export async function fetchSocialSentiment(symbol: string): Promise<SocialSentiment> {
-  return backendFetch(`/api/social/sentiment/${symbol}`, () => ({
-    symbol,
-    token: symbol.split("-")[0],
-    sentiment_score: 0.5,
-    sentiment_label: "neutral" as const,
-    mention_count_24h: 0,
-    positive_mentions: 0,
-    negative_mentions: 0,
-    top_mentions: [],
-    source: "mock",
-  }));
+  try {
+    const response = await fetch(`/api/social/sentiment/${symbol}`);
+    if (!response.ok) throw new Error(`Proxy error: ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    console.warn("Social sentiment failed:", error);
+    return {
+      symbol,
+      token: symbol.split("-")[0],
+      sentiment_score: 0.5,
+      sentiment_label: "neutral" as const,
+      mention_count_24h: 0,
+      positive_mentions: 0,
+      negative_mentions: 0,
+      top_mentions: [],
+      source: "mock",
+    };
+  }
 }
 
 export async function fetchTrendingTokens(): Promise<unknown[]> {
-  return backendFetch("/api/social/trending", () => []);
+  try {
+    const response = await fetch("/api/social/trending");
+    if (!response.ok) throw new Error(`Proxy error: ${response.status}`);
+    return await response.json();
+  } catch {
+    return [];
+  }
 }
 
 // --- Helpers ---
