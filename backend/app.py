@@ -422,6 +422,39 @@ async def alpha_score(symbol: str, _: None = Depends(verify_api_key)):
         raise HTTPException(status_code=500, detail=f"Alpha Score failed: {e}")
 
 
+# --- Backtesting ---
+
+
+@app.get("/api/backtest/{symbol}")
+async def backtest(symbol: str, _: None = Depends(verify_api_key)):
+    """Run Alpha Score backtest against historical data."""
+    cache_key = f"backtest:{symbol}"
+    cached = _cache_get(cache_key, AI_CACHE_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        candles = await _try_live_or_mock(
+            lambda: pac.get_historical_candles(symbol, "1h", 500),
+            lambda: mock_data.get_candles(symbol, "1h", 500),
+            f"backtest-candles/{symbol}",
+        )
+        candle_list = candles if isinstance(candles, list) else candles.get("data", [])
+
+        import dataclasses as dc
+
+        from services.backtest import run_backtest as _run_backtest
+
+        result = _run_backtest(symbol=symbol, candles=candle_list)
+        result_dict = dc.asdict(result)
+        _cache_set(cache_key, result_dict)
+        return result_dict
+
+    except Exception as e:
+        logger.error(f"Backtest failed for {symbol}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Backtest failed: {e}")
+
+
 # --- Social Sentiment (Elfa AI) ---
 
 
