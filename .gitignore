@@ -1,0 +1,19 @@
+node_modules/
+.next/
+.env
+.env.local
+.env.production
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+*.egg-info/
+.DS_Store
+
+# Secrets / keys
+*.key
+*.pem
+*.p12
+credentials.json
+secrets/
