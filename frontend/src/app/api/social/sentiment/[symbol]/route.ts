@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://89.167.70.176:8002";
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8002";
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || "";
 
 export async function GET(
