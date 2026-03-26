@@ -1,18 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { PrivyProvider, usePrivy } from "@privy-io/react-auth";
 import {
   Wallet,
   TrendingUp,
   TrendingDown,
   Zap,
   Shield,
-  LogIn,
+  Search,
   ExternalLink,
 } from "lucide-react";
-
-const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "cmn68tirx046b0ckye8rxc97h";
 
 interface AlphaScore {
   symbol: string;
@@ -35,22 +32,7 @@ interface AlphaScore {
 
 interface WalletBalance {
   sol: number;
-  usdc: number;
   total_usd: number;
-}
-
-export default function PortfolioPage() {
-  return (
-    <PrivyProvider
-      appId={PRIVY_APP_ID}
-      config={{
-        appearance: { theme: "dark", accentColor: "#22c55e", walletChainType: "ethereum-and-solana" },
-        loginMethods: ["wallet"],
-      }}
-    >
-      <PortfolioContent />
-    </PrivyProvider>
-  );
 }
 
 interface PacificaPosition {
@@ -70,120 +52,114 @@ interface PacificaOrder {
   order_type: string;
 }
 
-function PortfolioContent() {
-  const { ready, authenticated, login, user } = usePrivy();
+export default function PortfolioPage() {
+  const [addressInput, setAddressInput] = useState("");
+  const [address, setAddress] = useState<string | null>(null);
   const [alphaScores, setAlphaScores] = useState<Record<string, AlphaScore>>({});
   const [balance, setBalance] = useState<WalletBalance | null>(null);
   const [positions, setPositions] = useState<PacificaPosition[]>([]);
   const [orders, setOrders] = useState<PacificaOrder[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const wallet = user?.linkedAccounts?.find((a) => a.type === "wallet");
-  const address = wallet && "address" in wallet ? (wallet as { address: string }).address : null;
-
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (addr: string) => {
     setLoading(true);
+    setError("");
+
+    // Load Alpha Scores
     try {
-      // Load precomputed Alpha Scores
       const res = await fetch("/api/alpha-scores/all");
       if (res.ok) {
         const data = await res.json();
         if (data?.scores) setAlphaScores(data.scores);
       }
-    } catch {
-      // Scores unavailable
-    }
+    } catch { /* unavailable */ }
 
-    // Fetch Solana balance if wallet connected
-    if (address) {
-      try {
-        const rpcRes = await fetch("https://api.devnet.solana.com", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "getBalance",
-            params: [address],
-          }),
-        });
-        if (rpcRes.ok) {
-          const rpcData = await rpcRes.json();
-          const solBalance = (rpcData?.result?.value ?? 0) / 1e9;
-          // Estimate USD (use SOL price from Alpha Scores if available)
-          const solPrice = alphaScores["SOL-USDC"]
-            ? parseFloat(alphaScores["SOL-USDC"].trade_suggestion?.entry_zone || "180")
-            : 180;
-          setBalance({
-            sol: solBalance,
-            usdc: 0, // Would need SPL token query for USDC balance
-            total_usd: solBalance * solPrice,
-          });
+    // Fetch SOL balance
+    try {
+      const rpcRes = await fetch("https://api.devnet.solana.com", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getBalance", params: [addr] }),
+      });
+      if (rpcRes.ok) {
+        const rpcData = await rpcRes.json();
+        if (rpcData?.error) {
+          setError("Invalid Solana address");
+          setLoading(false);
+          return;
         }
-      } catch {
-        // RPC unavailable
+        const solBalance = (rpcData?.result?.value ?? 0) / 1e9;
+        setBalance({ sol: solBalance, total_usd: solBalance * 180 });
       }
+    } catch { /* RPC unavailable */ }
 
-      // Fetch REAL positions from Pacifica (public API — no auth needed!)
-      try {
-        const posRes = await fetch(`https://api.pacifica.fi/api/v1/positions?account=${address}`);
-        if (posRes.ok) {
-          const posData = await posRes.json();
-          if (posData?.success && Array.isArray(posData.data)) {
-            setPositions(posData.data.map((p: Record<string, unknown>) => ({
-              symbol: String(p.symbol || p.market || ""),
-              side: String(p.side || ""),
-              size: Number(p.size || p.amount || 0),
-              entry_price: Number(p.entry_price || p.entryPrice || 0),
-              unrealized_pnl: Number(p.unrealized_pnl || p.pnl || 0),
-              leverage: Number(p.leverage || 1),
-            })));
-          }
+    // Fetch REAL positions from Pacifica
+    try {
+      const posRes = await fetch(`https://api.pacifica.fi/api/v1/positions?account=${addr}`);
+      if (posRes.ok) {
+        const posData = await posRes.json();
+        if (posData?.success && Array.isArray(posData.data)) {
+          setPositions(posData.data.map((p: Record<string, unknown>) => ({
+            symbol: String(p.symbol || p.market || ""),
+            side: String(p.side || ""),
+            size: Number(p.size || p.amount || 0),
+            entry_price: Number(p.entry_price || p.entryPrice || 0),
+            unrealized_pnl: Number(p.unrealized_pnl || p.pnl || 0),
+            leverage: Number(p.leverage || 1),
+          })));
         }
-      } catch {
-        // Positions unavailable
       }
+    } catch { /* unavailable */ }
 
-      // Fetch REAL open orders from Pacifica
-      try {
-        const ordRes = await fetch(`https://api.pacifica.fi/api/v1/orders?account=${address}`);
-        if (ordRes.ok) {
-          const ordData = await ordRes.json();
-          if (ordData?.success && Array.isArray(ordData.data)) {
-            setOrders(ordData.data.map((o: Record<string, unknown>) => ({
-              symbol: String(o.symbol || o.market || ""),
-              side: String(o.side || ""),
-              size: Number(o.size || o.amount || 0),
-              price: Number(o.price || 0),
-              order_type: String(o.order_type || o.type || "limit"),
-            })));
-          }
+    // Fetch REAL orders from Pacifica
+    try {
+      const ordRes = await fetch(`https://api.pacifica.fi/api/v1/orders?account=${addr}`);
+      if (ordRes.ok) {
+        const ordData = await ordRes.json();
+        if (ordData?.success && Array.isArray(ordData.data)) {
+          setOrders(ordData.data.map((o: Record<string, unknown>) => ({
+            symbol: String(o.symbol || o.market || ""),
+            side: String(o.side || ""),
+            size: Number(o.size || o.amount || 0),
+            price: Number(o.price || 0),
+            order_type: String(o.order_type || o.type || "limit"),
+          })));
         }
-      } catch {
-        // Orders unavailable
       }
-    }
+    } catch { /* unavailable */ }
+
     setLoading(false);
-  }, [address, alphaScores]);
+  }, []);
 
+  // Load Alpha Scores on mount (even without wallet)
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address]);
+    (async () => {
+      try {
+        const res = await fetch("/api/alpha-scores/all");
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.scores) setAlphaScores(data.scores);
+        }
+      } catch { /* unavailable */ }
+    })();
+  }, []);
 
-  // Not ready yet
-  if (!ready) {
-    return (
-      <div className="mx-auto max-w-7xl px-4 py-6">
-        <div className="h-64 animate-pulse rounded-lg bg-card" />
-      </div>
-    );
-  }
+  const handleConnect = () => {
+    const addr = addressInput.trim();
+    if (addr.length < 32 || addr.length > 44) {
+      setError("Enter a valid Solana wallet address (32-44 characters)");
+      return;
+    }
+    setAddress(addr);
+    loadData(addr);
+  };
 
-  // Not connected — prompt login
-  if (!authenticated || !address) {
+  const scores = Object.values(alphaScores);
+  const strongSignals = scores.filter((s) => s.alpha_score > 65 || s.alpha_score < 35);
+
+  // Not connected — show address input
+  if (!address) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
         <div>
@@ -192,37 +168,48 @@ function PortfolioContent() {
             Portfolio
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Connect your Solana wallet to see personalized Alpha Score recommendations
+            Enter your Solana wallet address to see real Pacifica positions + AI recommendations
           </p>
         </div>
 
-        <div className="flex flex-col items-center rounded-xl border border-border bg-card p-12 text-center">
-          <Wallet className="h-16 w-16 text-primary/30" />
+        <div className="flex flex-col items-center rounded-xl border border-border bg-card p-8 text-center">
+          <Wallet className="h-12 w-12 text-primary/30" />
           <h2 className="mt-4 text-lg font-bold">Connect Your Wallet</h2>
           <p className="mt-2 max-w-md text-sm text-muted">
-            Link your Solana wallet via Privy to unlock personalized portfolio analytics,
-            Alpha Score recommendations tailored to your exposure, and risk alerts.
+            Paste your Solana address to see your real Pacifica positions, open orders, and personalized Alpha Score recommendations. No signing required — data is read-only from Pacifica&apos;s public API.
           </p>
-          <button
-            onClick={login}
-            className="mt-6 flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-background transition-colors hover:bg-primary/80"
-          >
-            <LogIn className="h-4 w-4" />
-            Connect with Privy
-          </button>
+
+          <div className="mt-6 flex w-full max-w-lg gap-2">
+            <input
+              type="text"
+              placeholder="Solana wallet address (e.g. 7xKX...)"
+              value={addressInput}
+              onChange={(e) => setAddressInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+              className="flex-1 rounded-lg border border-border bg-background px-4 py-3 font-mono text-sm placeholder:text-muted/50"
+            />
+            <button
+              onClick={handleConnect}
+              className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-background transition-colors hover:bg-primary/80"
+            >
+              <Search className="h-4 w-4" />
+              Look Up
+            </button>
+          </div>
+          {error && <p className="mt-2 text-sm text-danger">{error}</p>}
           <p className="mt-3 text-[10px] text-muted">
-            Powered by Privy — supports Phantom, Backpack, Solflare, and more
+            Read-only — we never sign transactions or access private keys
           </p>
         </div>
 
-        {/* Show Alpha Scores even without wallet — teaser */}
-        {Object.keys(alphaScores).length > 0 && (
+        {/* Preview Alpha Scores */}
+        {scores.length > 0 && (
           <div className="rounded-xl border border-dashed border-border bg-card/50 p-6">
             <p className="mb-3 text-sm font-medium text-muted">
-              Preview: Top Alpha Score signals right now
+              Top Alpha Score signals right now
             </p>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {Object.values(alphaScores)
+              {scores
                 .sort((a, b) => Math.abs(b.alpha_score - 50) - Math.abs(a.alpha_score - 50))
                 .slice(0, 4)
                 .map((score) => (
@@ -243,13 +230,8 @@ function PortfolioContent() {
     );
   }
 
-  // Connected — show personalized portfolio
+  // Connected — show portfolio
   const shortAddr = `${address.slice(0, 6)}...${address.slice(-4)}`;
-  const scores = Object.values(alphaScores);
-  const strongSignals = scores.filter((s) => s.alpha_score > 65 || s.alpha_score < 35);
-  const highRisk = scores.filter(
-    (s) => s.liquidation_risk?.risk_level === "high" || s.liquidation_risk?.risk_level === "critical"
-  );
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
@@ -260,170 +242,51 @@ function PortfolioContent() {
             Portfolio
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Personalized Alpha Score analytics for your wallet
+            Real Pacifica data for your wallet
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
-          <span className="h-2 w-2 rounded-full bg-success" />
-          <span className="font-mono text-xs">{shortAddr}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
+            <span className="h-2 w-2 rounded-full bg-success" />
+            <span className="font-mono text-xs">{shortAddr}</span>
+          </div>
+          <button
+            onClick={() => { setAddress(null); setPositions([]); setOrders([]); setBalance(null); }}
+            className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:text-foreground"
+          >
+            Disconnect
+          </button>
         </div>
       </div>
 
-      {/* Wallet balance */}
-      {balance && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs text-muted">SOL Balance</p>
-            <p className="mt-1 font-mono text-2xl font-bold">
-              {balance.sol.toFixed(4)}
-            </p>
-            <p className="text-xs text-muted">
-              ~${balance.total_usd.toFixed(2)} USD
-            </p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs text-muted">Strong Signals</p>
-            <p className="mt-1 font-mono text-2xl font-bold text-yellow-400">
-              {strongSignals.length}
-            </p>
-            <p className="text-xs text-muted">Alpha Score &gt;65 or &lt;35</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs text-muted">High Risk Markets</p>
-            <p className={`mt-1 font-mono text-2xl font-bold ${highRisk.length > 0 ? "text-danger" : "text-success"}`}>
-              {highRisk.length}
-            </p>
-            <p className="text-xs text-muted">Elevated liquidation risk</p>
-          </div>
+      {loading && (
+        <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span className="text-sm">Loading portfolio data from Pacifica...</span>
         </div>
       )}
 
-      {/* Personalized recommendations */}
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-          <Zap className="h-5 w-5 text-yellow-400" />
-          Recommended Actions
-        </h2>
-        {loading && scores.length === 0 ? (
-          <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-20 animate-pulse rounded-lg bg-card" />
-            ))}
-          </div>
-        ) : strongSignals.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center text-sm text-muted">
-            No strong signals right now. All markets are in neutral territory (Alpha 35-65).
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {strongSignals
-              .sort((a, b) => Math.abs(b.alpha_score - 50) - Math.abs(a.alpha_score - 50))
-              .map((score) => {
-                const isBullish = score.alpha_score > 50;
-                return (
-                  <div
-                    key={score.symbol}
-                    className={`rounded-lg border p-4 ${isBullish ? "border-success/20 bg-success/5" : "border-danger/20 bg-danger/5"}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {isBullish ? (
-                          <TrendingUp className="h-5 w-5 text-success" />
-                        ) : (
-                          <TrendingDown className="h-5 w-5 text-danger" />
-                        )}
-                        <span className="text-lg font-bold">{score.symbol.replace("-USDC", "")}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${isBullish ? "bg-success/20 text-success" : "bg-danger/20 text-danger"}`}>
-                          {score.trade_suggestion.action.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className={`font-mono text-2xl font-black ${isBullish ? "text-success" : "text-danger"}`}>
-                          {score.alpha_score.toFixed(0)}
-                        </span>
-                        <span className="text-xs text-muted">/100</span>
-                      </div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-4 gap-3 text-xs">
-                      <div>
-                        <span className="text-muted">Entry</span>
-                        <p className="font-mono font-medium">{score.trade_suggestion.entry_zone}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted">Target</span>
-                        <p className="font-mono font-medium text-success">{score.trade_suggestion.target}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted">Stop</span>
-                        <p className="font-mono font-medium text-danger">{score.trade_suggestion.stop_loss}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted">R:R</span>
-                        <p className="font-mono font-medium">1:{score.trade_suggestion.risk_reward}</p>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex items-center gap-3 text-xs text-muted">
-                      <span className="flex items-center gap-1">
-                        <Shield className={`h-3 w-3 ${score.liquidation_risk?.risk_level === "low" ? "text-success" : "text-warning"}`} />
-                        {score.liquidation_risk?.risk_level} risk
-                      </span>
-                      <span className="rounded bg-card px-1.5 py-0.5">{score.regime.replace("_", " ")}</span>
-                    </div>
-                  </div>
-                );
-              })}
+      {/* Wallet balance + stats */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        {balance && (
+          <div className="rounded-lg border border-border bg-card p-4">
+            <p className="text-xs text-muted">SOL Balance</p>
+            <p className="mt-1 font-mono text-2xl font-bold">{balance.sol.toFixed(4)}</p>
           </div>
         )}
-      </section>
-
-      {/* All markets overview */}
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">All Markets</h2>
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-card text-left text-xs text-muted">
-                <th className="px-4 py-2">Market</th>
-                <th className="px-4 py-2">Alpha Score</th>
-                <th className="px-4 py-2">Direction</th>
-                <th className="px-4 py-2">Action</th>
-                <th className="px-4 py-2">Risk</th>
-                <th className="px-4 py-2">Regime</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scores
-                .sort((a, b) => b.alpha_score - a.alpha_score)
-                .map((score) => (
-                  <tr key={score.symbol} className="border-b border-border/30 hover:bg-card-hover">
-                    <td className="px-4 py-2 font-medium">{score.symbol.replace("-USDC", "")}</td>
-                    <td className="px-4 py-2">
-                      <span className={`font-mono font-bold ${score.alpha_score > 58 ? "text-success" : score.alpha_score < 42 ? "text-danger" : "text-warning"}`}>
-                        {score.alpha_score.toFixed(0)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className={`rounded px-2 py-0.5 text-xs font-bold ${score.direction === "bullish" ? "bg-success/10 text-success" : score.direction === "bearish" ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"}`}>
-                        {score.direction.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 font-mono text-xs">
-                      {score.trade_suggestion.action.toUpperCase()}
-                    </td>
-                    <td className="px-4 py-2 text-xs">
-                      {score.liquidation_risk?.risk_level}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-muted">
-                      {score.regime.replace("_", " ")}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted">Open Positions</p>
+          <p className="mt-1 font-mono text-2xl font-bold">{positions.length}</p>
+          <p className="text-xs text-muted">{positions.length > 0 ? "Live from Pacifica" : "No active trades"}</p>
         </div>
-      </section>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted">Strong Signals</p>
+          <p className="mt-1 font-mono text-2xl font-bold text-yellow-400">{strongSignals.length}</p>
+          <p className="text-xs text-muted">Alpha Score &gt;65 or &lt;35</p>
+        </div>
+      </div>
 
-      {/* Real Pacifica Positions (from public API) */}
+      {/* Real Pacifica Positions */}
       {positions.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
@@ -494,70 +357,89 @@ function PortfolioContent() {
         </section>
       )}
 
-      {/* No positions message */}
-      {positions.length === 0 && authenticated && !loading && (
+      {/* No positions */}
+      {positions.length === 0 && !loading && (
         <div className="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center">
           <p className="text-sm text-muted">No open positions found on Pacifica for this wallet.</p>
-          <p className="mt-1 text-xs text-muted/60">Trade on Pacifica DEX to see your positions here — data is pulled live from the blockchain.</p>
+          <p className="mt-1 text-xs text-muted/60">Trade on Pacifica DEX first, then your positions appear here automatically.</p>
         </div>
       )}
 
-      {/* One-click trade execution section */}
+      {/* Personalized recommendations */}
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-          <ExternalLink className="h-5 w-5 text-primary" />
-          Execute on Pacifica
+          <Zap className="h-5 w-5 text-yellow-400" />
+          Recommended Actions
         </h2>
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-          <p className="mb-3 text-sm text-muted">
-            Alpha Compass generates signals — execute them directly on Pacifica DEX.
-            Click any market below to open Pacifica with the right pair pre-selected.
-          </p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {strongSignals.slice(0, 4).map((score) => {
-              const isBullish = score.alpha_score > 50;
-              const symbol = score.symbol.replace("-USDC", "");
-              return (
-                <a
-                  key={score.symbol}
-                  href={`https://test-app.pacifica.fi/trade/${symbol}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-card ${isBullish ? "border-success/30" : "border-danger/30"}`}
-                >
-                  <div>
-                    <span className="text-sm font-bold">{symbol}</span>
-                    <p className={`text-xs font-bold ${isBullish ? "text-success" : "text-danger"}`}>
-                      {score.trade_suggestion.action.toUpperCase()}
-                    </p>
-                  </div>
-                  <span className={`font-mono text-lg font-black ${isBullish ? "text-success" : "text-danger"}`}>
-                    {score.alpha_score.toFixed(0)}
-                  </span>
-                </a>
-              );
-            })}
+        {strongSignals.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center text-sm text-muted">
+            No strong signals right now. All markets are in neutral territory.
           </div>
-          {strongSignals.length === 0 && (
-            <a
-              href="https://test-app.pacifica.fi"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-primary/80"
-            >
-              Open Pacifica DEX
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          )}
-        </div>
+        ) : (
+          <div className="space-y-3">
+            {strongSignals
+              .sort((a, b) => Math.abs(b.alpha_score - 50) - Math.abs(a.alpha_score - 50))
+              .map((score) => {
+                const isBullish = score.alpha_score > 50;
+                return (
+                  <div
+                    key={score.symbol}
+                    className={`rounded-lg border p-4 ${isBullish ? "border-success/20 bg-success/5" : "border-danger/20 bg-danger/5"}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {isBullish ? <TrendingUp className="h-5 w-5 text-success" /> : <TrendingDown className="h-5 w-5 text-danger" />}
+                        <span className="text-lg font-bold">{score.symbol.replace("-USDC", "")}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${isBullish ? "bg-success/20 text-success" : "bg-danger/20 text-danger"}`}>
+                          {score.trade_suggestion.action.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className={`font-mono text-2xl font-black ${isBullish ? "text-success" : "text-danger"}`}>
+                          {score.alpha_score.toFixed(0)}
+                        </span>
+                        <span className="text-xs text-muted">/100</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-4 gap-3 text-xs">
+                      <div><span className="text-muted">Entry</span><p className="font-mono font-medium">{score.trade_suggestion.entry_zone}</p></div>
+                      <div><span className="text-muted">Target</span><p className="font-mono font-medium text-success">{score.trade_suggestion.target}</p></div>
+                      <div><span className="text-muted">Stop</span><p className="font-mono font-medium text-danger">{score.trade_suggestion.stop_loss}</p></div>
+                      <div><span className="text-muted">R:R</span><p className="font-mono font-medium">1:{score.trade_suggestion.risk_reward}</p></div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-3 text-xs text-muted">
+                      <span className="flex items-center gap-1">
+                        <Shield className={`h-3 w-3 ${score.liquidation_risk?.risk_level === "low" ? "text-success" : "text-warning"}`} />
+                        {score.liquidation_risk?.risk_level} risk
+                      </span>
+                      <span className="rounded bg-card px-1.5 py-0.5">{score.regime.replace("_", " ")}</span>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </section>
 
-      {/* Execution architecture note */}
+      {/* Execute on Pacifica */}
+      <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-center">
+        <p className="text-sm">Ready to act on these signals?</p>
+        <a
+          href="https://test-app.pacifica.fi"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-primary/80"
+        >
+          Trade on Pacifica DEX
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      </div>
+
+      {/* Architecture note */}
       <div className="rounded-lg border border-dashed border-border bg-card/50 p-4 text-xs text-muted">
-        <strong>Execution Architecture:</strong> Alpha Compass uses Pacifica&apos;s REST API for market data
-        and builds OHLCV candles from the trade stream. Order execution requires Pacifica&apos;s Agent Key
-        signing (available via their SDK). Current integration: signal generation → deep-link to Pacifica
-        with pre-selected market. Full API execution is the Phase 2 roadmap item pending Pacifica SDK access.
+        <strong>How it works:</strong> Positions and orders are fetched from Pacifica&apos;s public REST API
+        ({`/positions?account={address}`}). No signing or API keys required — Pacifica exposes this data publicly.
+        Alpha Scores are precomputed every 60 seconds from real trade data collected via WebSocket.
       </div>
     </div>
   );
