@@ -1,292 +1,149 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Activity, Loader2 } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Activity } from "lucide-react";
 
-interface LiveTrade {
+interface MarketHeat {
   symbol: string;
   price: number;
-  amount: number;
-  side: string;
-  timestamp: number;
-  usdValue: number;
+  change24h: number;
+  volume24h: number;
+  fundingRate: number;
+  alphaScore: number | null;
+  direction: string | null;
+  tradeCount: number;
+  buyPressure: number;
 }
 
-interface Bubble {
-  id: number;
-  x: number;
-  y: number;
-  radius: number;
-  targetRadius: number;
-  color: string;
-  alpha: number;
-  symbol: string;
-  price: number;
-  usdValue: number;
-  side: string;
-  isWhale: boolean;
-  vx: number;
-  vy: number;
-  life: number;
+const SYMBOLS = ["BTC", "ETH", "SOL", "DOGE", "ARB", "AVAX", "LINK", "OP"];
+
+function heatColor(value: number, min: number, max: number): string {
+  // Maps value to red (-) through yellow (0) to green (+)
+  const normalized = Math.max(0, Math.min(1, (value - min) / (max - min || 1)));
+  if (normalized < 0.5) {
+    const t = normalized * 2;
+    const r = 239;
+    const g = Math.round(68 + t * (180 - 68));
+    const b = 68;
+    return `rgb(${r},${g},${b})`;
+  }
+  const t = (normalized - 0.5) * 2;
+  const r = Math.round(239 - t * (239 - 34));
+  const g = Math.round(180 + t * (197 - 180));
+  const b = Math.round(68 - t * (68 - 94));
+  return `rgb(${r},${g},${b})`;
 }
 
-const SYMBOL_POSITIONS: Record<string, { col: number; label: string }> = {
-  BTC: { col: 0, label: "BTC" },
-  ETH: { col: 1, label: "ETH" },
-  SOL: { col: 2, label: "SOL" },
-  DOGE: { col: 3, label: "DOGE" },
-  ARB: { col: 4, label: "ARB" },
-  AVAX: { col: 5, label: "AVAX" },
-  LINK: { col: 6, label: "LINK" },
-  OP: { col: 7, label: "OP" },
-};
-
-const WHALE_THRESHOLD = 50000; // $50K
-const BUY_COLOR = "#22c55e";
-const SELL_COLOR = "#ef4444";
-const WHALE_COLOR = "#facc15";
+function alphaColor(score: number | null): string {
+  if (score === null) return "rgba(255,255,255,0.1)";
+  if (score > 65) return "#22c55e";
+  if (score > 55) return "#86efac";
+  if (score < 35) return "#ef4444";
+  if (score < 45) return "#fca5a5";
+  return "#eab308";
+}
 
 export default function PulsePage() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const bubblesRef = useRef<Bubble[]>([]);
-  const nextIdRef = useRef(0);
-  const wsRef = useRef<WebSocket | null>(null);
-  const animFrameRef = useRef<number>(0);
-  const [connected, setConnected] = useState(false);
-  const [stats, setStats] = useState({
-    totalTrades: 0,
-    totalVolume: 0,
-    whaleCount: 0,
-    buyPressure: 50,
-  });
-  const statsRef = useRef(stats);
+  const [markets, setMarkets] = useState<MarketHeat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [tradeCounts, setTradeCounts] = useState<Record<string, { count: number; buys: number }>>({});
 
-  const addBubble = useCallback((trade: LiveTrade) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // Fetch prices + alpha scores
+  const loadData = useCallback(async () => {
+    try {
+      const priceRes = await fetch("https://api.pacifica.fi/api/v1/market-price");
+      const prices = await priceRes.json();
+      const priceList = Array.isArray(prices) ? prices : prices.data || [];
 
-    const sym = trade.symbol.replace("-USDC", "");
-    const pos = SYMBOL_POSITIONS[sym];
-    if (!pos) return;
+      // Fetch alpha scores for all markets in parallel
+      const alphaResults = await Promise.allSettled(
+        SYMBOLS.map(async (sym) => {
+          const res = await fetch(`/api/alpha-score/${sym}-USDC`);
+          if (!res.ok) return null;
+          return res.json();
+        })
+      );
 
-    const cols = Object.keys(SYMBOL_POSITIONS).length;
-    const colWidth = canvas.width / cols;
-    const centerX = pos.col * colWidth + colWidth / 2;
-    const centerY = canvas.height * 0.5;
+      const alphaMap: Record<string, { score: number; direction: string }> = {};
+      alphaResults.forEach((r) => {
+        if (r.status === "fulfilled" && r.value) {
+          alphaMap[r.value.symbol] = { score: r.value.alpha_score, direction: r.value.direction };
+        }
+      });
 
-    const isWhale = trade.usdValue >= WHALE_THRESHOLD;
-    const maxRadius = isWhale ? 60 : Math.min(40, Math.max(6, Math.sqrt(trade.usdValue / 100)));
+      const heat: MarketHeat[] = priceList
+        .filter((p: Record<string, unknown>) => SYMBOLS.includes(String(p.symbol).replace("-USDC", "")))
+        .map((p: Record<string, unknown>) => {
+          const sym = String(p.symbol);
+          const alpha = alphaMap[sym];
+          const tc = tradeCounts[sym.replace("-USDC", "")] || { count: 0, buys: 0 };
+          return {
+            symbol: sym,
+            price: Number(p.price || p.markPrice || 0),
+            change24h: Number(p.change24h || p.priceChange24h || 0),
+            volume24h: Number(p.volume24h || p.volume || 0),
+            fundingRate: Number(p.fundingRate || 0),
+            alphaScore: alpha?.score ?? null,
+            direction: alpha?.direction ?? null,
+            tradeCount: tc.count,
+            buyPressure: tc.count > 0 ? (tc.buys / tc.count) * 100 : 50,
+          };
+        });
 
-    const isBuy = trade.side.includes("open_long") || trade.side.includes("close_short");
+      setMarkets(heat);
+      setLoading(false);
+    } catch (e) {
+      console.error("Heatmap load failed:", e);
+      setLoading(false);
+    }
+  }, [tradeCounts]);
 
-    const bubble: Bubble = {
-      id: nextIdRef.current++,
-      x: centerX + (Math.random() - 0.5) * colWidth * 0.6,
-      y: centerY + (Math.random() - 0.5) * canvas.height * 0.5,
-      radius: 0,
-      targetRadius: maxRadius,
-      color: isWhale ? WHALE_COLOR : isBuy ? BUY_COLOR : SELL_COLOR,
-      alpha: 1,
-      symbol: sym,
-      price: trade.price,
-      usdValue: trade.usdValue,
-      side: isBuy ? "buy" : "sell",
-      isWhale,
-      vx: (Math.random() - 0.5) * 0.5,
-      vy: (Math.random() - 0.5) * 0.3 - 0.2,
-      life: isWhale ? 300 : 150,
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 10000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  // WebSocket for live trade counting
+  useEffect(() => {
+    const ws = new WebSocket("wss://ws.pacifica.fi/ws");
+    ws.onopen = () => {
+      setWsConnected(true);
+      for (const sym of SYMBOLS) {
+        ws.send(JSON.stringify({ method: "subscribe", params: { source: "trades", symbol: sym } }));
+      }
+      const ping = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ method: "ping" }));
+      }, 30000);
+      ws.addEventListener("close", () => clearInterval(ping));
     };
-
-    bubblesRef.current.push(bubble);
-
-    // Update stats
-    const s = statsRef.current;
-    statsRef.current = {
-      totalTrades: s.totalTrades + 1,
-      totalVolume: s.totalVolume + trade.usdValue,
-      whaleCount: s.whaleCount + (isWhale ? 1 : 0),
-      buyPressure: isBuy
-        ? Math.min(100, s.buyPressure + 0.5)
-        : Math.max(0, s.buyPressure - 0.5),
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.channel !== "trades" || !msg.data?.length) return;
+        for (const raw of msg.data) {
+          const sym = raw.s;
+          const isBuy = raw.d?.includes("open_long") || raw.d?.includes("close_short");
+          setTradeCounts((prev) => {
+            const cur = prev[sym] || { count: 0, buys: 0 };
+            return { ...prev, [sym]: { count: cur.count + 1, buys: cur.buys + (isBuy ? 1 : 0) } };
+          });
+        }
+      } catch { /* ignore */ }
     };
-    setStats({ ...statsRef.current });
+    ws.onclose = () => { setWsConnected(false); };
+    ws.onerror = () => ws.close();
+    return () => { ws.onclose = null; ws.close(); };
   }, []);
 
-  // WebSocket connection
-  useEffect(() => {
-    function connect() {
-      const ws = new WebSocket("wss://ws.pacifica.fi/ws");
-
-      ws.onopen = () => {
-        setConnected(true);
-        for (const sym of Object.keys(SYMBOL_POSITIONS)) {
-          ws.send(JSON.stringify({ method: "subscribe", params: { source: "trades", symbol: sym } }));
-        }
-        // Heartbeat
-        const ping = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ method: "ping" }));
-        }, 30000);
-        ws.addEventListener("close", () => clearInterval(ping));
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.channel !== "trades" || !msg.data?.length) return;
-
-          for (const raw of msg.data) {
-            const price = parseFloat(raw.p);
-            const amount = parseFloat(raw.a);
-            if (!price || !amount) continue;
-
-            addBubble({
-              symbol: `${raw.s}-USDC`,
-              price,
-              amount,
-              side: raw.d || "unknown",
-              timestamp: raw.t,
-              usdValue: price * amount,
-            });
-          }
-        } catch {
-          // ignore
-        }
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        setTimeout(connect, 5000);
-      };
-
-      ws.onerror = () => ws.close();
-      wsRef.current = ws;
-    }
-
-    connect();
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.onclose = null;
-        wsRef.current.close();
-      }
-    };
-  }, [addBubble]);
-
-  // Canvas animation loop
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * window.devicePixelRatio;
-      canvas.height = rect.height * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    function draw() {
-      if (!canvas || !ctx) return;
-      const w = canvas.width / window.devicePixelRatio;
-      const h = canvas.height / window.devicePixelRatio;
-
-      // Clear with fade trail
-      ctx.fillStyle = "rgba(10, 10, 15, 0.15)";
-      ctx.fillRect(0, 0, w, h);
-
-      // Draw column labels
-      const cols = Object.keys(SYMBOL_POSITIONS).length;
-      const colWidth = w / cols;
-      ctx.font = "12px monospace";
-      ctx.textAlign = "center";
-      for (const [sym, pos] of Object.entries(SYMBOL_POSITIONS)) {
-        const x = pos.col * colWidth + colWidth / 2;
-        ctx.fillStyle = "rgba(255,255,255,0.3)";
-        ctx.fillText(sym, x, 20);
-        // Column divider
-        ctx.strokeStyle = "rgba(255,255,255,0.05)";
-        ctx.beginPath();
-        ctx.moveTo(pos.col * colWidth, 30);
-        ctx.lineTo(pos.col * colWidth, h);
-        ctx.stroke();
-      }
-
-      // Buy/sell pressure bar at bottom
-      const bp = statsRef.current.buyPressure;
-      const barY = h - 8;
-      ctx.fillStyle = SELL_COLOR;
-      ctx.fillRect(0, barY, w, 8);
-      ctx.fillStyle = BUY_COLOR;
-      ctx.fillRect(0, barY, w * (bp / 100), 8);
-
-      // Update and draw bubbles
-      const alive: Bubble[] = [];
-      for (const b of bubblesRef.current) {
-        b.life--;
-        if (b.life <= 0) continue;
-
-        // Grow in
-        if (b.radius < b.targetRadius) {
-          b.radius += (b.targetRadius - b.radius) * 0.15;
-        }
-
-        // Fade out in last 30 frames
-        if (b.life < 30) {
-          b.alpha = b.life / 30;
-        }
-
-        // Drift
-        b.x += b.vx;
-        b.y += b.vy;
-
-        // Draw glow for whales
-        if (b.isWhale) {
-          const gradient = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.radius * 2);
-          gradient.addColorStop(0, `rgba(250, 204, 21, ${b.alpha * 0.3})`);
-          gradient.addColorStop(1, "rgba(250, 204, 21, 0)");
-          ctx.fillStyle = gradient;
-          ctx.beginPath();
-          ctx.arc(b.x, b.y, b.radius * 2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Draw bubble
-        ctx.globalAlpha = b.alpha;
-        ctx.fillStyle = b.color;
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Label for large trades
-        if (b.usdValue >= 10000 && b.alpha > 0.5) {
-          ctx.fillStyle = "rgba(255,255,255,0.9)";
-          ctx.font = b.isWhale ? "bold 11px monospace" : "10px monospace";
-          ctx.textAlign = "center";
-          const label = b.usdValue >= 1000000
-            ? `$${(b.usdValue / 1e6).toFixed(1)}M`
-            : `$${(b.usdValue / 1e3).toFixed(0)}K`;
-          ctx.fillText(label, b.x, b.y + 3);
-        }
-
-        ctx.globalAlpha = 1;
-        alive.push(b);
-      }
-      bubblesRef.current = alive;
-
-      animFrameRef.current = requestAnimationFrame(draw);
-    }
-
-    animFrameRef.current = requestAnimationFrame(draw);
-    return () => {
-      cancelAnimationFrame(animFrameRef.current);
-      window.removeEventListener("resize", resize);
-    };
-  }, []);
+  // Find min/max for heat coloring
+  const changes = markets.map((m) => m.change24h);
+  const minChange = Math.min(...changes, -3);
+  const maxChange = Math.max(...changes, 3);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 px-4 py-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">
@@ -294,81 +151,113 @@ export default function PulsePage() {
             Market Pulse
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Watch the market breathe — every trade on Pacifica visualized in real-time
+            All markets at a glance — price action, Alpha Score, funding, and live trade flow
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs text-muted">
-            <span className={`h-2 w-2 rounded-full ${connected ? "bg-success animate-pulse" : "bg-danger"}`} />
-            {connected ? "Live" : "Connecting..."}
-          </span>
-        </div>
-      </div>
-
-      {/* Stats bar */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted">Trades</p>
-          <p className="font-mono text-xl font-bold">{stats.totalTrades.toLocaleString()}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted">Volume</p>
-          <p className="font-mono text-xl font-bold">
-            ${stats.totalVolume >= 1e6
-              ? `${(stats.totalVolume / 1e6).toFixed(1)}M`
-              : stats.totalVolume >= 1e3
-                ? `${(stats.totalVolume / 1e3).toFixed(0)}K`
-                : stats.totalVolume.toFixed(0)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted">Whales (&gt;$50K)</p>
-          <p className="font-mono text-xl font-bold text-yellow-400">{stats.whaleCount}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted">Buy Pressure</p>
-          <div className="flex items-center gap-2">
-            <p className={`font-mono text-xl font-bold ${stats.buyPressure > 55 ? "text-success" : stats.buyPressure < 45 ? "text-danger" : "text-warning"}`}>
-              {stats.buyPressure.toFixed(0)}%
-            </p>
-            <div className="h-2 flex-1 rounded-full bg-danger/30">
-              <div className="h-full rounded-full bg-success transition-all" style={{ width: `${stats.buyPressure}%` }} />
-            </div>
-          </div>
-        </div>
+        <span className="flex items-center gap-1.5 text-xs text-muted">
+          <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-success animate-pulse" : "bg-warning"}`} />
+          {wsConnected ? "Live trades" : "Connecting..."}
+        </span>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-6 text-xs text-muted">
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-full bg-success" /> Buy
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted">
+        <span>Cell color = 24h price change</span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-3 w-3 rounded" style={{ background: "#ef4444" }} /> Bearish
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-full bg-danger" /> Sell
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-3 w-3 rounded" style={{ background: "#eab308" }} /> Flat
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-full bg-yellow-400" /> Whale (&gt;$50K)
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-3 w-3 rounded" style={{ background: "#22c55e" }} /> Bullish
         </span>
-        <span>Bubble size = trade value</span>
-        <span>Bottom bar = buy/sell pressure</span>
+        <span>|</span>
+        <span>Circle = Alpha Score (green=bullish, red=bearish, yellow=neutral)</span>
       </div>
 
-      {/* Canvas */}
-      <div className="relative overflow-hidden rounded-xl border border-border" style={{ height: "60vh" }}>
-        {!connected && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              <span className="text-sm">Connecting to Pacifica WebSocket...</span>
-            </div>
-          </div>
-        )}
-        <canvas
-          ref={canvasRef}
-          className="h-full w-full"
-          style={{ background: "rgb(10, 10, 15)" }}
-        />
-      </div>
+      {/* Heatmap grid */}
+      {loading ? (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-48 animate-pulse rounded-xl bg-card" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {markets.map((m) => {
+            const bg = heatColor(m.change24h, minChange, maxChange);
+            const alphaBg = alphaColor(m.alphaScore);
+
+            return (
+              <div
+                key={m.symbol}
+                className="relative overflow-hidden rounded-xl border border-border p-4 transition-all hover:scale-[1.02] hover:shadow-lg"
+                style={{ background: `linear-gradient(135deg, ${bg}15, ${bg}08)`, borderColor: `${bg}40` }}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-bold">{m.symbol.replace("-USDC", "")}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold`}
+                    style={{ background: `${bg}25`, color: bg }}
+                  >
+                    {m.change24h >= 0 ? "+" : ""}{m.change24h.toFixed(2)}%
+                  </span>
+                </div>
+
+                {/* Price */}
+                <p className="mt-1 font-mono text-2xl font-bold">
+                  ${m.price >= 1000 ? m.price.toLocaleString(undefined, { maximumFractionDigits: 0 }) : m.price >= 1 ? m.price.toFixed(2) : m.price.toFixed(4)}
+                </p>
+
+                {/* Alpha Score circle */}
+                <div className="mt-3 flex items-center gap-3">
+                  <div
+                    className="flex h-12 w-12 items-center justify-center rounded-full border-2"
+                    style={{ borderColor: alphaBg, background: `${alphaBg}15` }}
+                  >
+                    <span className="font-mono text-sm font-black" style={{ color: alphaBg }}>
+                      {m.alphaScore !== null ? m.alphaScore.toFixed(0) : "—"}
+                    </span>
+                  </div>
+                  <div className="flex-1 text-xs">
+                    {m.direction && (
+                      <p className="font-bold" style={{ color: alphaBg }}>
+                        {m.direction.toUpperCase()}
+                      </p>
+                    )}
+                    <p className="text-muted">
+                      FR: {(m.fundingRate * 100).toFixed(3)}%
+                    </p>
+                  </div>
+                </div>
+
+                {/* Live trade bar */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-[10px] text-muted">
+                    <span>{m.tradeCount} trades</span>
+                    <span>
+                      {m.buyPressure.toFixed(0)}% buy
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-danger/20">
+                    <div
+                      className="h-full rounded-full bg-success/70 transition-all duration-500"
+                      style={{ width: `${m.buyPressure}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Volume */}
+                <p className="mt-2 text-[10px] text-muted">
+                  Vol: ${m.volume24h >= 1e9 ? `${(m.volume24h / 1e9).toFixed(1)}B` : m.volume24h >= 1e6 ? `${(m.volume24h / 1e6).toFixed(0)}M` : `${(m.volume24h / 1e3).toFixed(0)}K`}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
