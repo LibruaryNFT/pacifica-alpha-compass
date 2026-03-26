@@ -20,7 +20,7 @@ import dynamic from "next/dynamic";
 
 const PRIMARY_NAV = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
-  { href: "/pulse", label: "Market Pulse", icon: BarChart3 },
+  { href: "/pulse", label: "Live Trades", icon: BarChart3 },
   { href: "/alpha", label: "Alpha Score", icon: Zap },
   { href: "/ai", label: "AI Consensus", icon: Brain },
   { href: "/alerts", label: "Alerts", icon: Bell },

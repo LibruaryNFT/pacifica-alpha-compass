@@ -1,30 +1,38 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Activity } from "lucide-react";
 
 const SYMBOLS = ["BTC", "ETH", "SOL", "DOGE", "ARB", "AVAX", "LINK", "OP"];
 
+interface RecentTrade {
+  isBuy: boolean;
+  usd: number;
+  price: number;
+  timestamp: number;
+}
+
 interface MarketState {
   symbol: string;
   price: number;
-  trades: number;
-  buyVolume: number;   // USD volume of buys
-  sellVolume: number;  // USD volume of sells
-  totalVolume: number; // total USD volume
-  momentum: number;    // 0-100, 50=neutral, >50=bullish, <50=bearish
-  lastFlash: number;
-  lastSide: string;
-  lastSize: number;    // USD value of last trade
+  recentTrades: RecentTrade[];
+  buyCount: number;
+  sellCount: number;
+  totalVolume: number;
 }
 
 export default function PulsePage() {
   const [markets, setMarkets] = useState<Record<string, MarketState>>({});
   const [wsConnected, setWsConnected] = useState(false);
-  const marketsRef = useRef(markets);
-  marketsRef.current = markets;
+  const [now, setNow] = useState(Date.now());
 
-  // Initialize with prices from trades endpoint
+  // Tick every second to update "X seconds ago"
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Initialize with REST trades
   useEffect(() => {
     async function init() {
       const results = await Promise.allSettled(
@@ -35,21 +43,30 @@ export default function PulsePage() {
           const trades = data?.data || [];
           if (trades.length === 0) return null;
 
-          const price = parseFloat(trades[0].price);
-          let buyVol = 0;
-          let sellVol = 0;
+          const recent: RecentTrade[] = [];
+          let buyCount = 0;
+          let sellCount = 0;
+          let totalVol = 0;
 
-          for (const t of trades) {
-            const usd = parseFloat(t.price) * parseFloat(t.amount);
+          for (const t of trades.slice(0, 10)) {
+            const price = parseFloat(t.price);
+            const amount = parseFloat(t.amount);
+            const usd = price * amount;
             const isBuy = t.side?.includes("open_long") || t.side?.includes("close_short");
-            if (isBuy) buyVol += usd;
-            else sellVol += usd;
+            if (isBuy) buyCount++;
+            else sellCount++;
+            totalVol += usd;
+            recent.push({ isBuy, usd, price, timestamp: t.created_at || Date.now() });
           }
 
-          const total = buyVol + sellVol;
-          const momentum = total > 0 ? (buyVol / total) * 100 : 50;
-
-          return { sym, price, buyVol, sellVol, total, trades: trades.length, momentum };
+          return {
+            sym,
+            price: parseFloat(trades[0].price),
+            recentTrades: recent.slice(0, 5),
+            buyCount,
+            sellCount,
+            totalVolume: totalVol,
+          };
         })
       );
 
@@ -60,14 +77,10 @@ export default function PulsePage() {
         initial[v.sym] = {
           symbol: `${v.sym}-USDC`,
           price: v.price,
-          trades: v.trades,
-          buyVolume: v.buyVol,
-          sellVolume: v.sellVol,
-          totalVolume: v.total,
-          momentum: v.momentum,
-          lastFlash: 0,
-          lastSide: "",
-          lastSize: 0,
+          recentTrades: v.recentTrades,
+          buyCount: v.buyCount,
+          sellCount: v.sellCount,
+          totalVolume: v.totalVolume,
         };
       }
       setMarkets(initial);
@@ -75,7 +88,7 @@ export default function PulsePage() {
     init();
   }, []);
 
-  // WebSocket for live updates
+  // WebSocket for live trades
   useEffect(() => {
     const ws = new WebSocket("wss://ws.pacifica.fi/ws");
     ws.onopen = () => {
@@ -97,39 +110,28 @@ export default function PulsePage() {
         for (const raw of msg.data) {
           const sym = raw.s as string;
           const price = parseFloat(raw.p);
-          const isBuy = raw.d?.includes("open_long") || raw.d?.includes("close_short");
-
           const amount = parseFloat(raw.a) || 0;
-          const usdValue = price * amount;
+          const usd = price * amount;
+          const isBuy = raw.d?.includes("open_long") || raw.d?.includes("close_short");
 
           setMarkets((prev) => {
             const cur = prev[sym] || {
-              symbol: `${sym}-USDC`, price: 0, trades: 0,
-              buyVolume: 0, sellVolume: 0, totalVolume: 0,
-              momentum: 50, lastFlash: 0, lastSide: "", lastSize: 0,
+              symbol: `${sym}-USDC`, price: 0, recentTrades: [],
+              buyCount: 0, sellCount: 0, totalVolume: 0,
             };
 
-            const newBuyVol = cur.buyVolume + (isBuy ? usdValue : 0);
-            const newSellVol = cur.sellVolume + (isBuy ? 0 : usdValue);
-            const newTotal = newBuyVol + newSellVol;
-
-            // Volume-weighted EMA: bigger trades move the bar more
-            const weight = Math.min(0.15, usdValue / 50000); // $50K trade = max 15% influence
-            const newMomentum = cur.momentum * (1 - weight) + (isBuy ? 100 : 0) * weight;
+            const newTrade: RecentTrade = { isBuy, usd, price, timestamp: Date.now() };
+            const trades = [newTrade, ...cur.recentTrades].slice(0, 5);
 
             return {
               ...prev,
               [sym]: {
                 ...cur,
                 price: price > 0 ? price : cur.price,
-                trades: cur.trades + 1,
-                buyVolume: newBuyVol,
-                sellVolume: newSellVol,
-                totalVolume: newTotal,
-                momentum: newMomentum,
-                lastFlash: Date.now(),
-                lastSide: isBuy ? "buy" : "sell",
-                lastSize: usdValue,
+                recentTrades: trades,
+                buyCount: cur.buyCount + (isBuy ? 1 : 0),
+                sellCount: cur.sellCount + (isBuy ? 0 : 1),
+                totalVolume: cur.totalVolume + usd,
               },
             };
           });
@@ -148,10 +150,10 @@ export default function PulsePage() {
         <div>
           <h1 className="text-2xl font-bold">
             <Activity className="mr-2 inline h-6 w-6 text-primary" />
-            Market Pulse
+            Live Trades
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Live momentum across all Pacifica markets — volume-weighted buy/sell pressure from real trades
+            Real-time trade feed from Pacifica DEX — every trade, every market
           </p>
         </div>
         <span className="flex items-center gap-1.5 text-xs text-muted">
@@ -164,31 +166,22 @@ export default function PulsePage() {
         {SYMBOLS.map((sym) => {
           const m = markets[sym];
           if (!m) {
-            return (
-              <div key={sym} className="h-36 animate-pulse rounded-xl bg-card" />
-            );
+            return <div key={sym} className="h-48 animate-pulse rounded-xl bg-card" />;
           }
 
-          const isBullish = m.momentum > 55;
-          const isBearish = m.momentum < 45;
-          const flashAge = Date.now() - m.lastFlash;
-          const isFlashing = flashAge < 1500;
-          const flashColor = m.lastSide === "buy" ? "ring-success/50" : "ring-danger/50";
+          const total = m.buyCount + m.sellCount;
+          const buyPct = total > 0 ? Math.round((m.buyCount / total) * 100) : 50;
+          const bias = buyPct > 60 ? "bullish" : buyPct < 40 ? "bearish" : "neutral";
 
           return (
-            <div
-              key={sym}
-              className={`rounded-xl border border-border bg-card p-4 transition-all duration-300 ${
-                isFlashing ? `ring-2 ${flashColor}` : ""
-              }`}
-            >
+            <div key={sym} className="rounded-xl border border-border bg-card p-4">
               {/* Header */}
               <div className="flex items-center justify-between">
                 <span className="text-lg font-bold">{sym}</span>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  isBullish ? "bg-success/10 text-success" : isBearish ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"
+                  bias === "bullish" ? "bg-success/10 text-success" : bias === "bearish" ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"
                 }`}>
-                  {isBullish ? "BULLISH" : isBearish ? "BEARISH" : "NEUTRAL"}
+                  {buyPct}% buy
                 </span>
               </div>
 
@@ -201,40 +194,43 @@ export default function PulsePage() {
                     : m.price.toFixed(4)}
               </p>
 
-              {/* Momentum bar — volume-weighted buy/sell pressure */}
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-[10px] text-muted">
-                  <span className="text-danger">Sell pressure</span>
-                  <span className="font-mono font-bold">
-                    {m.momentum > 55 ? "Strong Buy" : m.momentum < 45 ? "Strong Sell" : "Neutral"} ({m.momentum.toFixed(0)}%)
-                  </span>
-                  <span className="text-success">Buy pressure</span>
-                </div>
-                <div className="mt-1 h-3 overflow-hidden rounded-full bg-card-hover">
-                  {/* Red base (full width) */}
-                  <div className="relative h-full w-full bg-danger/20">
-                    {/* Green fill from left (represents buy momentum) */}
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out"
-                      style={{
-                        width: `${m.momentum}%`,
-                        background: m.momentum > 55
-                          ? "linear-gradient(90deg, rgba(34,197,94,0.3), rgba(34,197,94,0.7))"
-                          : m.momentum < 45
-                            ? "linear-gradient(90deg, rgba(239,68,68,0.3), rgba(239,68,68,0.5))"
-                            : "linear-gradient(90deg, rgba(234,179,8,0.3), rgba(234,179,8,0.5))",
-                      }}
-                    />
-                    {/* Center marker */}
-                    <div className="absolute inset-y-0 left-1/2 w-px bg-muted/30" />
-                  </div>
-                </div>
+              {/* Recent trades feed */}
+              <div className="mt-3 space-y-1">
+                {m.recentTrades.length === 0 ? (
+                  <p className="text-[10px] text-muted">Waiting for trades...</p>
+                ) : (
+                  m.recentTrades.map((t, i) => {
+                    const age = Math.round((now - t.timestamp) / 1000);
+                    const isNew = age < 3;
+                    return (
+                      <div
+                        key={`${t.timestamp}-${i}`}
+                        className={`flex items-center justify-between text-[11px] transition-all duration-500 ${
+                          isNew ? (t.isBuy ? "text-success font-bold" : "text-danger font-bold") : "text-muted"
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className={`h-1.5 w-1.5 rounded-full ${t.isBuy ? "bg-success" : "bg-danger"}`} />
+                          <span>{t.isBuy ? "BUY" : "SELL"}</span>
+                          <span className="font-mono">
+                            ${t.usd >= 1e6
+                              ? `${(t.usd / 1e6).toFixed(1)}M`
+                              : t.usd >= 1000
+                                ? `${(t.usd / 1000).toFixed(1)}K`
+                                : t.usd.toFixed(0)}
+                          </span>
+                        </span>
+                        <span className="text-[9px] text-muted/50">
+                          {age < 60 ? `${age}s` : `${Math.round(age / 60)}m`}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
-              <p className="mt-1 text-center text-[9px] text-muted/50">Vol-weighted EMA • updates live</p>
-
-              {/* Volume + last trade */}
-              <div className="mt-2 flex items-center justify-between text-[10px] text-muted">
+              {/* Volume summary */}
+              <div className="mt-2 flex items-center justify-between border-t border-border/30 pt-2 text-[10px] text-muted">
                 <span>
                   Vol: ${m.totalVolume >= 1e6
                     ? `${(m.totalVolume / 1e6).toFixed(1)}M`
@@ -242,22 +238,16 @@ export default function PulsePage() {
                       ? `${(m.totalVolume / 1e3).toFixed(0)}K`
                       : m.totalVolume.toFixed(0)}
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className={`h-1.5 w-1.5 rounded-full ${isFlashing ? (m.lastSide === "buy" ? "bg-success" : "bg-danger") : "bg-muted/30"}`} />
-                  {isFlashing && m.lastSize > 0
-                    ? `${m.lastSide === "buy" ? "Buy" : "Sell"} $${m.lastSize >= 1000 ? `${(m.lastSize / 1000).toFixed(1)}K` : m.lastSize.toFixed(0)}`
-                    : `${m.trades} trades`}
-                </span>
+                <span>{total} trades</span>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Data source */}
-      <div className="flex items-center gap-2 text-[10px] text-muted">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" />
-        Initial prices from Pacifica /trades API | Live momentum from WebSocket trade stream | Bar uses exponential moving average (doesn&apos;t reset)
+      <div className="text-[10px] text-muted">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400 inline-block mr-1.5" />
+        Trades from Pacifica WebSocket (wss://ws.pacifica.fi/ws) + REST API initial load
       </div>
     </div>
   );
