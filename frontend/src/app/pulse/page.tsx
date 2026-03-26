@@ -9,10 +9,13 @@ interface MarketState {
   symbol: string;
   price: number;
   trades: number;
-  buys: number;
-  momentum: number; // 0-100, 50=neutral, >50=bullish, <50=bearish
-  lastFlash: number; // timestamp of last trade (for flash animation)
+  buyVolume: number;   // USD volume of buys
+  sellVolume: number;  // USD volume of sells
+  totalVolume: number; // total USD volume
+  momentum: number;    // 0-100, 50=neutral, >50=bullish, <50=bearish
+  lastFlash: number;
   lastSide: string;
+  lastSize: number;    // USD value of last trade
 }
 
 export default function PulsePage() {
@@ -26,30 +29,45 @@ export default function PulsePage() {
     async function init() {
       const results = await Promise.allSettled(
         SYMBOLS.map(async (sym) => {
-          const res = await fetch(`https://api.pacifica.fi/api/v1/trades?symbol=${sym}&limit=20`);
-          if (!res.ok) return { sym, price: 0, buys: 10, total: 20 };
+          const res = await fetch(`https://api.pacifica.fi/api/v1/trades?symbol=${sym}&limit=50`);
+          if (!res.ok) return null;
           const data = await res.json();
           const trades = data?.data || [];
-          const price = trades.length > 0 ? parseFloat(trades[0].price) : 0;
-          const buys = trades.filter((t: Record<string, string>) =>
-            t.side?.includes("open_long") || t.side?.includes("close_short")
-          ).length;
-          return { sym, price, buys, total: trades.length };
+          if (trades.length === 0) return null;
+
+          const price = parseFloat(trades[0].price);
+          let buyVol = 0;
+          let sellVol = 0;
+
+          for (const t of trades) {
+            const usd = parseFloat(t.price) * parseFloat(t.amount);
+            const isBuy = t.side?.includes("open_long") || t.side?.includes("close_short");
+            if (isBuy) buyVol += usd;
+            else sellVol += usd;
+          }
+
+          const total = buyVol + sellVol;
+          const momentum = total > 0 ? (buyVol / total) * 100 : 50;
+
+          return { sym, price, buyVol, sellVol, total, trades: trades.length, momentum };
         })
       );
 
       const initial: Record<string, MarketState> = {};
       for (const r of results) {
         if (r.status !== "fulfilled" || !r.value) continue;
-        const { sym, price, buys, total } = r.value;
-        initial[sym] = {
-          symbol: `${sym}-USDC`,
-          price,
-          trades: total,
-          buys,
-          momentum: total > 0 ? (buys / total) * 100 : 50,
+        const v = r.value;
+        initial[v.sym] = {
+          symbol: `${v.sym}-USDC`,
+          price: v.price,
+          trades: v.trades,
+          buyVolume: v.buyVol,
+          sellVolume: v.sellVol,
+          totalVolume: v.total,
+          momentum: v.momentum,
           lastFlash: 0,
           lastSide: "",
+          lastSize: 0,
         };
       }
       setMarkets(initial);
@@ -81,27 +99,37 @@ export default function PulsePage() {
           const price = parseFloat(raw.p);
           const isBuy = raw.d?.includes("open_long") || raw.d?.includes("close_short");
 
+          const amount = parseFloat(raw.a) || 0;
+          const usdValue = price * amount;
+
           setMarkets((prev) => {
             const cur = prev[sym] || {
-              symbol: `${sym}-USDC`, price: 0, trades: 0, buys: 0,
-              momentum: 50, lastFlash: 0, lastSide: "",
+              symbol: `${sym}-USDC`, price: 0, trades: 0,
+              buyVolume: 0, sellVolume: 0, totalVolume: 0,
+              momentum: 50, lastFlash: 0, lastSide: "", lastSize: 0,
             };
 
-            const newTrades = cur.trades + 1;
-            const newBuys = cur.buys + (isBuy ? 1 : 0);
-            // Exponential moving average for momentum (smooth, doesn't reset)
-            const newMomentum = cur.momentum * 0.92 + (isBuy ? 100 : 0) * 0.08;
+            const newBuyVol = cur.buyVolume + (isBuy ? usdValue : 0);
+            const newSellVol = cur.sellVolume + (isBuy ? 0 : usdValue);
+            const newTotal = newBuyVol + newSellVol;
+
+            // Volume-weighted EMA: bigger trades move the bar more
+            const weight = Math.min(0.15, usdValue / 50000); // $50K trade = max 15% influence
+            const newMomentum = cur.momentum * (1 - weight) + (isBuy ? 100 : 0) * weight;
 
             return {
               ...prev,
               [sym]: {
                 ...cur,
                 price: price > 0 ? price : cur.price,
-                trades: newTrades,
-                buys: newBuys,
+                trades: cur.trades + 1,
+                buyVolume: newBuyVol,
+                sellVolume: newSellVol,
+                totalVolume: newTotal,
                 momentum: newMomentum,
                 lastFlash: Date.now(),
                 lastSide: isBuy ? "buy" : "sell",
+                lastSize: usdValue,
               },
             };
           });
@@ -203,12 +231,20 @@ export default function PulsePage() {
                 </div>
               </div>
 
-              {/* Stats */}
+              {/* Volume + last trade */}
               <div className="mt-2 flex items-center justify-between text-[10px] text-muted">
-                <span>{m.trades} trades tracked</span>
+                <span>
+                  Vol: ${m.totalVolume >= 1e6
+                    ? `${(m.totalVolume / 1e6).toFixed(1)}M`
+                    : m.totalVolume >= 1e3
+                      ? `${(m.totalVolume / 1e3).toFixed(0)}K`
+                      : m.totalVolume.toFixed(0)}
+                </span>
                 <span className="flex items-center gap-1">
                   <span className={`h-1.5 w-1.5 rounded-full ${isFlashing ? (m.lastSide === "buy" ? "bg-success" : "bg-danger") : "bg-muted/30"}`} />
-                  {isFlashing ? (m.lastSide === "buy" ? "Buy" : "Sell") : "Waiting..."}
+                  {isFlashing && m.lastSize > 0
+                    ? `${m.lastSide === "buy" ? "Buy" : "Sell"} $${m.lastSize >= 1000 ? `${(m.lastSize / 1000).toFixed(1)}K` : m.lastSize.toFixed(0)}`
+                    : `${m.trades} trades`}
                 </span>
               </div>
             </div>
