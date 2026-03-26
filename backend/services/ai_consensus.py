@@ -280,7 +280,10 @@ def _generate_summary(
 
 def _generate_alert(analyses: list[AIAnalysis], market_data: dict) -> str | None:
     """Generate an urgent alert if conditions are unusual."""
-    funding = market_data.get("funding_rate", 0)
+    try:
+        funding = float(market_data.get("funding_rate", 0))
+    except (ValueError, TypeError):
+        funding = 0.0
 
     # High funding rate alert
     if abs(funding) > 0.05:
