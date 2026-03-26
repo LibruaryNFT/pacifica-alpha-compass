@@ -43,7 +43,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- Bounded TTL Cache (max 500 entries, prevents memory exhaustion) ---
-AI_CACHE_TTL = 3600  # 1 hour
+AI_CACHE_TTL = 86400  # 24 hours — AI calls are expensive, cache aggressively
 PRICE_CACHE_TTL = 30  # 30 seconds
 MAX_CACHE_SIZE = 500
 
