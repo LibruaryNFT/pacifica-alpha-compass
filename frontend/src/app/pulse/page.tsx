@@ -29,25 +29,34 @@ export default function PulsePage() {
   const tradeCountsRef = useRef(tradeCounts);
   tradeCountsRef.current = tradeCounts;
 
-  // Load prices (fast, no AI calls)
+  // Load prices from trades endpoint (market-price is 404)
   useEffect(() => {
     async function loadPrices() {
       try {
-        const res = await fetch("https://api.pacifica.fi/api/v1/market-price");
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : data.data || [];
+        const results = await Promise.allSettled(
+          SYMBOLS.map(async (sym) => {
+            const res = await fetch(`https://api.pacifica.fi/api/v1/trades?symbol=${sym}&limit=1`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            const trades = data?.data || [];
+            if (trades.length === 0) return null;
+            return { symbol: `${sym}-USDC`, price: parseFloat(trades[0].price) };
+          })
+        );
 
-        const heat: MarketHeat[] = list
-          .filter((p: Record<string, unknown>) => SYMBOLS.includes(String(p.symbol).replace("-USDC", "")))
-          .map((p: Record<string, unknown>) => ({
-            symbol: String(p.symbol),
-            price: Number(p.price || p.markPrice || 0),
-            change24h: Number(p.change24h || p.priceChange24h || 0),
-            volume24h: Number(p.volume24h || p.volume || 0),
-            fundingRate: Number(p.fundingRate || 0),
+        const heat: MarketHeat[] = results
+          .filter((r): r is PromiseFulfilledResult<{ symbol: string; price: number } | null> => r.status === "fulfilled" && r.value !== null)
+          .map((r) => ({
+            symbol: r.value!.symbol,
+            price: r.value!.price,
+            change24h: 0, // Can't get from trades endpoint
+            volume24h: 0,
+            fundingRate: 0,
           }));
 
-        setMarkets(heat);
+        if (heat.length > 0) {
+          setMarkets(heat);
+        }
         setLoading(false);
       } catch {
         setLoading(false);
@@ -55,7 +64,7 @@ export default function PulsePage() {
     }
 
     loadPrices();
-    const interval = setInterval(loadPrices, 10000);
+    const interval = setInterval(loadPrices, 15000);
     return () => clearInterval(interval);
   }, []);
 
