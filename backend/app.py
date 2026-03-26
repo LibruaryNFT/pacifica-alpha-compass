@@ -1,14 +1,20 @@
 """Pacifica Alpha Compass — AI-powered trading intelligence API."""
 
+import asyncio
 import logging
 import os
+import re
+import time
+import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from schemas import ConsensusResult, FundingScanResult, PortfolioSummary, WhaleAlert
 from services import mock_data
 from services import pacifica_client as pac
@@ -17,8 +23,13 @@ from services.alpha_score import compute_alpha_score
 
 load_dotenv()
 
-# Internal API key — only Vercel proxy knows this
+# --- Configuration ---
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "https://alpha-compass.vercel.app,http://localhost:3000",
+).split(",")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,33 +37,62 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Demo mode: use mock data when Pacifica API is unreachable
-DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
-
-# Simple TTL cache for expensive operations
-import time
+# --- Bounded TTL Cache (max 500 entries, prevents memory exhaustion) ---
+AI_CACHE_TTL = 3600  # 1 hour
+PRICE_CACHE_TTL = 30  # 30 seconds
+MAX_CACHE_SIZE = 500
 
 _cache: dict[str, tuple[float, object]] = {}
-AI_CACHE_TTL = 3600  # 1 hour for AI consensus (hackathon — minimize API costs)
-PRICE_CACHE_TTL = 30  # 30 seconds for prices
 
 
 def _cache_get(key: str, ttl: float) -> object | None:
-    """Get from cache if not expired."""
     if key in _cache:
         ts, data = _cache[key]
         if time.time() - ts < ttl:
             return data
+        del _cache[key]
     return None
 
 
 def _cache_set(key: str, data: object) -> None:
-    """Store in cache with current timestamp."""
+    # Evict oldest if over limit
+    if len(_cache) >= MAX_CACHE_SIZE:
+        oldest = min(_cache, key=lambda k: _cache[k][0])
+        del _cache[oldest]
     _cache[key] = (time.time(), data)
 
 
+# --- Concurrency limiter for AI calls (max 3 simultaneous) ---
+_ai_semaphore = asyncio.Semaphore(3)
+
+# --- Rate limiter (per-IP, in-memory) ---
+_rate_limits: dict[str, list[float]] = defaultdict(list)
+RATE_LIMIT_WINDOW = 60  # seconds
+RATE_LIMIT_MAX = 30  # max requests per window for expensive endpoints
+
+
+def _check_rate_limit(client_ip: str) -> None:
+    now = time.time()
+    # Clean old entries
+    _rate_limits[client_ip] = [t for t in _rate_limits[client_ip] if now - t < RATE_LIMIT_WINDOW]
+    if len(_rate_limits[client_ip]) >= RATE_LIMIT_MAX:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    _rate_limits[client_ip].append(now)
+
+
+# --- Symbol validation ---
+VALID_SYMBOL = re.compile(r"^[A-Z]{2,10}(-USDC)?$")
+
+
+def validate_symbol(symbol: str) -> str:
+    s = symbol.upper().strip()
+    if not VALID_SYMBOL.match(s):
+        raise HTTPException(status_code=400, detail=f"Invalid symbol: {symbol}")
+    return s
+
+
+# --- Helpers ---
 async def _try_live_or_mock(live_fn, mock_fn, label: str):
-    """Try live Pacifica API first, fall back to mock data."""
     if DEMO_MODE:
         return mock_fn()
     try:
@@ -62,9 +102,9 @@ async def _try_live_or_mock(live_fn, mock_fn, label: str):
         return mock_fn()
 
 
+# --- App setup ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events."""
     logger.info("Pacifica Alpha Compass starting up...")
     logger.info(f"Demo mode: {DEMO_MODE}")
     if not DEMO_MODE:
@@ -78,9 +118,9 @@ app = FastAPI(
     description="AI-powered perp trading intelligence for Pacifica DEX",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None,  # Disable docs in production
+    redoc_url=None,
 )
-
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://alpha-compass.vercel.app,http://localhost:3000").split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -90,17 +130,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-import re
 
-VALID_SYMBOL = re.compile(r"^[A-Z]{2,10}(-USDC)?$")
+# --- Security headers middleware ---
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
-def validate_symbol(symbol: str) -> str:
-    """Validate and normalize market symbol."""
-    s = symbol.upper().strip()
-    if not VALID_SYMBOL.match(s):
-        raise HTTPException(status_code=400, detail=f"Invalid symbol: {symbol}")
-    return s
+# --- Global error handler (no stack trace leakage) ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    request_id = str(uuid.uuid4())[:8]
+    logger.error(f"[{request_id}] Unhandled error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error", "request_id": request_id},
+    )
 
 
 # --- Health ---
@@ -280,17 +330,21 @@ async def get_trade_history():
 from fastapi import Header
 
 
-def verify_api_key(x_internal_key: str = Header(default="")):
-    """Verify internal API key for expensive endpoints."""
+def verify_api_key(request: Request, x_internal_key: str = Header(default="")):
+    """Verify internal API key + rate limit for expensive endpoints."""
     if not INTERNAL_API_KEY:
         raise HTTPException(status_code=503, detail="API key not configured")
     if x_internal_key != INTERNAL_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
+    # Rate limit by client IP
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
 
 
 @app.get("/api/ai/consensus/{symbol}")
 async def ai_consensus(symbol: str, _: None = Depends(verify_api_key)) -> ConsensusResult:
     """Run 3 AI models and return consensus analysis for a market."""
+    symbol = validate_symbol(symbol)
     # Check cache first (AI calls are expensive)
     cache_key = f"ai_consensus:{symbol}"
     cached = _cache_get(cache_key, AI_CACHE_TTL)
@@ -321,18 +375,19 @@ async def ai_consensus(symbol: str, _: None = Depends(verify_api_key)) -> Consen
 
         price = float(price_data.get("price", price_data.get("markPrice", price_data.get("lastPrice", 0))))
 
-        result = await get_consensus(
-            symbol=symbol,
-            price=price,
-            candles=candles if isinstance(candles, list) else candles.get("data", []),
-            orderbook=orderbook,
-            recent_trades=recent_trades if isinstance(recent_trades, list) else None,
-            funding_rate=float(funding.get("fundingRate", funding.get("rate", 0))),
-            change_24h=float(price_data.get("change24h", price_data.get("priceChange24h", 0))),
-            volume_24h=float(price_data.get("volume24h", price_data.get("volume", 0))),
-            high_24h=float(price_data.get("high24h", price_data.get("high", 0))),
-            low_24h=float(price_data.get("low24h", price_data.get("low", 0))),
-        )
+        async with _ai_semaphore:  # Max 3 concurrent AI calls
+            result = await get_consensus(
+                symbol=symbol,
+                price=price,
+                candles=candles if isinstance(candles, list) else candles.get("data", []),
+                orderbook=orderbook,
+                recent_trades=recent_trades if isinstance(recent_trades, list) else None,
+                funding_rate=float(funding.get("fundingRate", funding.get("rate", 0))),
+                change_24h=float(price_data.get("change24h", price_data.get("priceChange24h", 0))),
+                volume_24h=float(price_data.get("volume24h", price_data.get("volume", 0))),
+                high_24h=float(price_data.get("high24h", price_data.get("high", 0))),
+                low_24h=float(price_data.get("low24h", price_data.get("low", 0))),
+            )
         _cache_set(cache_key, result)
         return result
 
@@ -384,6 +439,7 @@ async def detect_whales(symbol: str, threshold_usd: float = 50000) -> list[Whale
 @app.get("/api/alpha-score/{symbol}")
 async def alpha_score(symbol: str, _: None = Depends(verify_api_key)):
     """Compute proprietary Alpha Score for a market."""
+    symbol = validate_symbol(symbol)
     cache_key = f"alpha_score:{symbol}"
     cached = _cache_get(cache_key, AI_CACHE_TTL)
     if cached is not None:
@@ -444,6 +500,7 @@ async def alpha_score(symbol: str, _: None = Depends(verify_api_key)):
 @app.get("/api/backtest/{symbol}")
 async def backtest(symbol: str, _: None = Depends(verify_api_key)):
     """Run Alpha Score backtest against historical data."""
+    symbol = validate_symbol(symbol)
     cache_key = f"backtest:{symbol}"
     cached = _cache_get(cache_key, AI_CACHE_TTL)
     if cached is not None:
