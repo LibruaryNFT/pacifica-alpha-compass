@@ -78,7 +78,7 @@ function PortfolioContent() {
     // Fetch Solana balance if wallet connected
     if (address) {
       try {
-        const rpcRes = await fetch("https://api.mainnet-beta.solana.com", {
+        const rpcRes = await fetch("https://api.devnet.solana.com", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

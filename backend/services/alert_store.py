@@ -89,6 +89,9 @@ def get_configs() -> list[dict]:
 
 
 def create_config(symbol: str, condition: str, threshold: float, discord_webhook: str = "") -> dict:
+    # Validate Discord webhook URL if provided
+    if discord_webhook and not discord_webhook.startswith("https://discord.com/api/webhooks/"):
+        discord_webhook = ""  # Silently reject invalid webhooks
     db = _get_db()
     alert_id = f"{symbol.lower()}-{condition}-{int(threshold)}-{int(time.time())}"
     now = datetime.now(tz=timezone.utc).isoformat()

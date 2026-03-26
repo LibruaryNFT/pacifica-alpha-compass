@@ -149,10 +149,13 @@ async def _analyze_risk(market_data: dict) -> AIAnalysis:
     try:
         client = _get_anthropic()
         prompt = RISK_PROMPT.format(**market_data)
-        resp = await client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=500,
-            messages=[{"role": "user", "content": prompt}],
+        resp = await asyncio.wait_for(
+            client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=500,
+                messages=[{"role": "user", "content": prompt}],
+            ),
+            timeout=30,
         )
         parsed = _parse_ai_response(resp.content[0].text)
         return AIAnalysis(
@@ -182,10 +185,13 @@ async def _analyze_sentiment(market_data: dict) -> AIAnalysis:
     try:
         client = _get_openai()
         prompt = SENTIMENT_PROMPT.format(**market_data)
-        resp = await client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
+        resp = await asyncio.wait_for(
+            client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+            ),
+            timeout=30,
         )
         parsed = _parse_ai_response(resp.choices[0].message.content)
         return AIAnalysis(
@@ -215,10 +221,13 @@ async def _analyze_technical(market_data: dict) -> AIAnalysis:
     try:
         client = _get_groq()
         prompt = TECHNICAL_PROMPT.format(**market_data)
-        resp = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
+        resp = await asyncio.wait_for(
+            client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+            ),
+            timeout=30,
         )
         parsed = _parse_ai_response(resp.choices[0].message.content)
         return AIAnalysis(
