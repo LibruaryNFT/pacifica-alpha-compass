@@ -113,16 +113,7 @@ _alpha_last_updated: float = 0
 _consensus_history: list[dict] = []  # Last 50 AI consensus results
 MAX_HISTORY = 50
 
-# --- Alert system ---
-_alert_configs: list[dict] = [
-    # Default alerts that demonstrate the feature
-    {"id": "btc-high", "symbol": "BTC-USDC", "condition": "above", "threshold": 70, "enabled": True},
-    {"id": "btc-low", "symbol": "BTC-USDC", "condition": "below", "threshold": 30, "enabled": True},
-    {"id": "eth-high", "symbol": "ETH-USDC", "condition": "above", "threshold": 70, "enabled": True},
-    {"id": "sol-high", "symbol": "SOL-USDC", "condition": "above", "threshold": 65, "enabled": True},
-]
-_triggered_alerts: list[dict] = []  # Last 100 triggered alerts
-MAX_ALERTS = 100
+# --- Persistent alert + order systems (SQLite-backed) ---
 
 
 async def _precompute_alpha_scores() -> None:
@@ -179,37 +170,30 @@ async def _precompute_alpha_scores() -> None:
                     logger.warning(f"Precompute failed for {symbol}: {e}")
 
             _alpha_last_updated = time.time()
-            # Check alert conditions
-            for cfg in _alert_configs:
-                if not cfg.get("enabled"):
-                    continue
-                score_data = _precomputed_alpha.get(cfg["symbol"])
-                if not score_data:
-                    continue
+            # Check persistent alerts (SQLite + Discord webhooks)
+            for symbol, score_data in _precomputed_alpha.items():
                 alpha = score_data.get("alpha_score", 50)
-                triggered = False
-                if cfg["condition"] == "above" and alpha >= cfg["threshold"]:
-                    triggered = True
-                elif cfg["condition"] == "below" and alpha <= cfg["threshold"]:
-                    triggered = True
-                if triggered:
-                    alert = {
-                        "id": cfg["id"],
-                        "symbol": cfg["symbol"],
-                        "condition": cfg["condition"],
-                        "threshold": cfg["threshold"],
-                        "actual_score": alpha,
-                        "direction": score_data.get("direction", "neutral"),
-                        "timestamp": datetime.now().isoformat(),
-                    }
-                    # Avoid duplicate consecutive alerts for same config
-                    if not _triggered_alerts or _triggered_alerts[0].get("id") != cfg["id"]:
-                        _triggered_alerts.insert(0, alert)
-                        if len(_triggered_alerts) > MAX_ALERTS:
-                            _triggered_alerts.pop()
-                        logger.info(
-                            f"Alert triggered: {cfg['symbol']} alpha={alpha:.0f} {cfg['condition']} {cfg['threshold']}"
+                direction = score_data.get("direction", "neutral")
+                triggered = alert_check(symbol, alpha, direction)
+                for t in triggered:
+                    logger.info(
+                        f"Alert triggered: {t['symbol']} alpha={t['actual_score']:.0f} {t['condition']} {t['threshold']}"
+                    )
+
+            # Resolve order intents against current prices
+            current_prices = {}
+            for sym, sd in _precomputed_alpha.items():
+                if sd.get("trade_suggestion", {}).get("entry_zone"):
+                    try:
+                        current_prices[sym] = float(
+                            str(sd["trade_suggestion"]["entry_zone"]).replace("$", "").replace(",", "")
                         )
+                    except (ValueError, TypeError):
+                        pass
+            resolved = resolve_intents(current_prices)
+            if resolved > 0:
+                logger.info(f"Resolved {resolved} order intents")
+
             logger.info(f"Precomputed Alpha Scores for {len(_precomputed_alpha)} markets")
         except Exception as e:
             logger.error(f"Alpha precompute loop error: {e}")
@@ -666,50 +650,114 @@ async def ai_history(_: None = Depends(verify_api_key)):
     return {"history": _consensus_history, "count": len(_consensus_history)}
 
 
-# --- Alerts ---
+# --- Alerts (persistent SQLite + Discord webhooks) ---
 
 
 @app.get("/api/alerts")
 async def get_alerts(_: None = Depends(verify_api_key)):
-    """Get alert configs and triggered alerts."""
+    """Get alert configs and triggered alerts (persistent across restarts)."""
     return {
-        "configs": _alert_configs,
-        "triggered": _triggered_alerts,
-        "triggered_count": len(_triggered_alerts),
+        "configs": alert_get_configs(),
+        "triggered": alert_get_triggered(100),
+        "triggered_count": len(alert_get_triggered(100)),
     }
 
 
 @app.post("/api/alerts")
 async def create_alert(request: Request, _: None = Depends(verify_api_key)):
-    """Create a new alert config."""
+    """Create a new alert config with optional Discord webhook."""
     body = await request.json()
     symbol = validate_symbol(body.get("symbol", ""))
     condition = body.get("condition", "above")
     threshold = float(body.get("threshold", 70))
+    discord_webhook = body.get("discord_webhook", "")
 
     if condition not in ("above", "below"):
         raise HTTPException(status_code=400, detail="Condition must be 'above' or 'below'")
     if not (0 <= threshold <= 100):
         raise HTTPException(status_code=400, detail="Threshold must be 0-100")
 
-    alert_id = f"{symbol.lower()}-{condition}-{int(threshold)}-{int(time.time())}"
-    config = {
-        "id": alert_id,
-        "symbol": symbol,
-        "condition": condition,
-        "threshold": threshold,
-        "enabled": True,
-    }
-    _alert_configs.append(config)
-    return config
+    return alert_create(symbol, condition, threshold, discord_webhook)
 
 
 @app.delete("/api/alerts/{alert_id}")
 async def delete_alert(alert_id: str, _: None = Depends(verify_api_key)):
     """Delete an alert config."""
-    global _alert_configs
-    _alert_configs = [a for a in _alert_configs if a["id"] != alert_id]
+    alert_delete(alert_id)
     return {"deleted": alert_id}
+
+
+# --- Live Accuracy (rolling backtest on real collected candles) ---
+
+
+@app.get("/api/accuracy/live")
+async def live_accuracy(_: None = Depends(verify_api_key)):
+    """Run backtest on real collected candles and return live accuracy metrics."""
+    import dataclasses as dc
+
+    from services.backtest import run_backtest as _run_backtest
+
+    results = {}
+    for symbol in TOP_SYMBOLS:
+        real_candles = get_collected_candles(symbol, 3600, 500)
+        if len(real_candles) < 50:
+            results[symbol] = {"status": "collecting", "candle_count": len(real_candles), "needed": 50}
+            continue
+        bt = _run_backtest(symbol=symbol, candles=real_candles)
+        bt_dict = dc.asdict(bt)
+        bt_dict["data_source"] = "pacifica_trade_stream"
+        bt_dict["candle_count"] = len(real_candles)
+        results[symbol] = bt_dict
+
+    # Aggregate stats
+    active = [r for r in results.values() if r.get("total_signals", 0) > 0]
+    total_signals = sum(r["total_signals"] for r in active)
+    correct_signals = sum(r["correct_signals"] for r in active)
+    total_pnl = sum(r["total_pnl_pct"] for r in active)
+
+    return {
+        "markets": results,
+        "aggregate": {
+            "markets_with_data": len(active),
+            "markets_collecting": len(results) - len(active),
+            "total_signals": total_signals,
+            "correct_signals": correct_signals,
+            "accuracy": round(correct_signals / total_signals * 100, 1) if total_signals > 0 else 0,
+            "total_pnl_pct": round(total_pnl, 2),
+        },
+        "last_updated": datetime.now().isoformat(),
+    }
+
+
+# --- Order Intents (paper trading) ---
+
+
+@app.post("/api/orders/intent")
+async def create_order_intent(request: Request, _: None = Depends(verify_api_key)):
+    """Create an order intent from Alpha Score signal."""
+    body = await request.json()
+    symbol = validate_symbol(body.get("symbol", ""))
+    return create_intent(
+        symbol=symbol,
+        side=body.get("side", "long"),
+        size=float(body.get("size", 1)),
+        entry_price=float(body.get("entry_price", 0)),
+        target_price=float(body.get("target_price", 0)),
+        stop_price=float(body.get("stop_price", 0)),
+        alpha_score=float(body.get("alpha_score", 50)),
+        direction=body.get("direction", "neutral"),
+        risk_reward=float(body.get("risk_reward", 0)),
+        wallet_address=body.get("wallet_address", ""),
+    )
+
+
+@app.get("/api/orders/intents")
+async def list_order_intents(_: None = Depends(verify_api_key)):
+    """List order intents with paper trading stats."""
+    return {
+        "intents": get_intents(50),
+        "stats": get_intent_stats(),
+    }
 
 
 # --- Backtesting ---

@@ -17,3 +17,4 @@ dist/
 *.p12
 credentials.json
 secrets/
+backend/data/

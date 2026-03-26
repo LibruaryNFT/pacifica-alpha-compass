@@ -12,6 +12,7 @@ import {
   ArrowRightLeft,
   Zap,
   Bell,
+  FlaskConical,
   Menu,
   X,
 } from "lucide-react";
@@ -27,6 +28,7 @@ const PRIMARY_NAV = [
 
 const SECONDARY_NAV = [
   { href: "/portfolio", label: "Portfolio", icon: Wallet },
+  { href: "/accuracy", label: "Live Accuracy", icon: FlaskConical },
   { href: "/backtest", label: "Backtest", icon: Compass },
   { href: "/whales", label: "Whales", icon: Fish },
   { href: "/bridge", label: "Bridge", icon: ArrowRightLeft },

@@ -10,6 +10,7 @@ interface AlertConfig {
   condition: "above" | "below";
   threshold: number;
   enabled: boolean;
+  discord_webhook?: string;
 }
 
 interface TriggeredAlert {
@@ -31,6 +32,7 @@ export default function AlertsPage() {
   const [newSymbol, setNewSymbol] = useState<string>(TOP_MARKETS[0]);
   const [newCondition, setNewCondition] = useState<"above" | "below">("above");
   const [newThreshold, setNewThreshold] = useState(70);
+  const [newDiscordWebhook, setNewDiscordWebhook] = useState("");
   const [creating, setCreating] = useState(false);
 
   const loadAlerts = useCallback(async () => {
@@ -56,16 +58,21 @@ export default function AlertsPage() {
   const createAlert = async () => {
     setCreating(true);
     try {
+      const payload: Record<string, unknown> = {
+        symbol: newSymbol,
+        condition: newCondition,
+        threshold: newThreshold,
+      };
+      if (newDiscordWebhook.trim()) {
+        payload.discord_webhook = newDiscordWebhook;
+      }
       const res = await fetch("/api/alerts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol: newSymbol,
-          condition: newCondition,
-          threshold: newThreshold,
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
+        setNewDiscordWebhook("");
         loadAlerts();
       }
     } catch {
@@ -75,8 +82,16 @@ export default function AlertsPage() {
   };
 
   const deleteAlert = async (alertId: string) => {
-    // Note: DELETE through proxy would need another route; for now use backend directly
-    setConfigs((prev) => prev.filter((c) => c.id !== alertId));
+    try {
+      const res = await fetch(`/api/alerts/${alertId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setConfigs((prev) => prev.filter((c) => c.id !== alertId));
+      }
+    } catch {
+      // Deletion failed
+    }
   };
 
   return (
@@ -97,50 +112,65 @@ export default function AlertsPage() {
           <Plus className="h-4 w-4" />
           New Alert
         </h2>
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="mb-1 block text-xs text-muted">Market</label>
-            <select
-              value={newSymbol}
-              onChange={(e) => setNewSymbol(e.target.value)}
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1 block text-xs text-muted">Market</label>
+              <select
+                value={newSymbol}
+                onChange={(e) => setNewSymbol(e.target.value)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              >
+                {TOP_MARKETS.map((s) => (
+                  <option key={s} value={s}>
+                    {s.replace("-USDC", "")}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted">When Alpha Score is</label>
+              <select
+                value={newCondition}
+                onChange={(e) => setNewCondition(e.target.value as "above" | "below")}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              >
+                <option value="above">Above</option>
+                <option value="below">Below</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted">Threshold (0-100)</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={newThreshold}
+                onChange={(e) => setNewThreshold(Number(e.target.value))}
+                className="w-20 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <button
+              onClick={createAlert}
+              disabled={creating}
+              className="rounded-lg bg-yellow-400/20 px-4 py-2 text-sm font-medium text-yellow-400 transition-colors hover:bg-yellow-400/30 disabled:opacity-50"
             >
-              {TOP_MARKETS.map((s) => (
-                <option key={s} value={s}>
-                  {s.replace("-USDC", "")}
-                </option>
-              ))}
-            </select>
+              {creating ? "Creating..." : "Create Alert"}
+            </button>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-muted">When Alpha Score is</label>
-            <select
-              value={newCondition}
-              onChange={(e) => setNewCondition(e.target.value as "above" | "below")}
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="above">Above</option>
-              <option value="below">Below</option>
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted">Threshold (0-100)</label>
+            <label className="mb-1 block text-xs text-muted">Discord Webhook (optional)</label>
             <input
-              type="number"
-              min={0}
-              max={100}
-              value={newThreshold}
-              onChange={(e) => setNewThreshold(Number(e.target.value))}
-              className="w-20 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              type="text"
+              placeholder="https://discord.com/api/webhooks/..."
+              value={newDiscordWebhook}
+              onChange={(e) => setNewDiscordWebhook(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             />
+            <p className="mt-1 text-xs text-muted">
+              Optional: paste a Discord webhook URL to receive alert notifications
+            </p>
           </div>
-          <button
-            onClick={createAlert}
-            disabled={creating}
-            className="rounded-lg bg-yellow-400/20 px-4 py-2 text-sm font-medium text-yellow-400 transition-colors hover:bg-yellow-400/30 disabled:opacity-50"
-          >
-            {creating ? "Creating..." : "Create Alert"}
-          </button>
         </div>
       </div>
 
