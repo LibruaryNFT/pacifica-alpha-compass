@@ -20,6 +20,9 @@ from services import mock_data
 from services import pacifica_client as pac
 from services.ai_consensus import get_consensus
 from services.alpha_score import compute_alpha_score
+from services.candle_collector import get_candles as get_collected_candles  # noqa: E402
+from services.candle_collector import get_stats as get_candle_stats  # noqa: E402
+from services.candle_collector import start_collector as start_candle_collector  # noqa: E402
 
 load_dotenv()
 
