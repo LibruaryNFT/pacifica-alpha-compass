@@ -10,29 +10,24 @@ import {
   Brain,
   Fish,
   ArrowRightLeft,
-  Gift,
   Zap,
   Menu,
   X,
-  Layers,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const PRIMARY_NAV = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
+  { href: "/pulse", label: "Market Pulse", icon: BarChart3 },
   { href: "/alpha", label: "Alpha Score", icon: Zap },
   { href: "/ai", label: "AI Consensus", icon: Brain },
-  { href: "/backtest", label: "Backtest", icon: Compass },
 ];
 
 const SECONDARY_NAV = [
+  { href: "/backtest", label: "Backtest", icon: Compass },
   { href: "/portfolio", label: "Portfolio", icon: Wallet },
-  { href: "/scanner", label: "Scanner", icon: Compass },
   { href: "/whales", label: "Whales", icon: Fish },
   { href: "/bridge", label: "Bridge", icon: ArrowRightLeft },
-  { href: "/referrals", label: "Referrals", icon: Gift },
-  { href: "/testnet", label: "Testnet", icon: Compass },
-  { href: "/architecture", label: "Architecture", icon: Layers },
 ];
 
 const WalletButton = dynamic(() => import("./WalletButton"), {
