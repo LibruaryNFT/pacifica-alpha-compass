@@ -20,13 +20,12 @@ import dynamic from "next/dynamic";
 
 const PRIMARY_NAV = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
-  { href: "/pulse", label: "Market Pulse", icon: BarChart3 },
   { href: "/alpha", label: "Alpha Score", icon: Zap },
   { href: "/ai", label: "AI Consensus", icon: Brain },
+  { href: "/backtest", label: "Backtest", icon: Compass },
 ];
 
 const SECONDARY_NAV = [
-  { href: "/backtest", label: "Backtest", icon: Compass },
   { href: "/portfolio", label: "Portfolio", icon: Wallet },
   { href: "/scanner", label: "Scanner", icon: Compass },
   { href: "/whales", label: "Whales", icon: Fish },
