@@ -71,6 +71,45 @@ export default function ArchitecturePage() {
         </p>
       </div>
 
+      {/* Why Blockchain */}
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-6">
+        <h2 className="mb-4 text-lg font-semibold">Why Solana / Pacifica?</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <h3 className="text-sm font-medium">The Data Source</h3>
+            <p className="mt-1 text-xs text-muted">
+              Pacifica is a perpetual futures DEX on Solana processing $440M+ daily volume.
+              Unlike centralized exchanges, all trade data is verifiable on-chain. Our analytics
+              layer reads directly from Pacifica&apos;s public API — same data that settles on Solana.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-sm font-medium">What the Blockchain Enables</h3>
+            <p className="mt-1 text-xs text-muted">
+              <strong>Transparent funding rates</strong> — calculated on-chain every 5 seconds, not by a company.
+              <strong> Non-custodial trading</strong> — users keep their keys, we just read public data.
+              <strong> Verifiable execution</strong> — every trade our Alpha Score references is settled on Solana.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-sm font-medium">Data Flow</h3>
+            <p className="mt-1 text-xs text-muted">
+              Solana blockchain → Pacifica matching engine → REST/WebSocket API → Alpha Compass
+              reads prices, orderbook, trades, funding rates → processes through 5 signal algorithms
+              + 3 AI models → outputs actionable intelligence.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-sm font-medium">Wallet Integration</h3>
+            <p className="mt-1 text-xs text-muted">
+              Users connect their Solana wallet (Phantom, Solflare) via Privy. In production,
+              this links to their actual Pacifica positions for real P&L tracking. The bridge
+              (Rhino.fi) lets them fund from any chain into Solana USDC.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Data flow diagram */}
       <div className="rounded-xl border border-border bg-card p-6">
         <h2 className="mb-4 text-lg font-semibold">Data Flow</h2>

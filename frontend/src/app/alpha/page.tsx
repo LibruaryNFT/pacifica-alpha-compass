@@ -132,6 +132,15 @@ export default function AlphaScorePage() {
         ))}
       </div>
 
+      {/* Signal sources */}
+      <div className="flex flex-wrap gap-2 text-[10px] text-muted">
+        <span className="rounded bg-card px-2 py-1">Momentum → Pacifica candle data</span>
+        <span className="rounded bg-card px-2 py-1">Volatility → Pacifica price range</span>
+        <span className="rounded bg-card px-2 py-1">Funding → Pacifica on-chain rates</span>
+        <span className="rounded bg-card px-2 py-1">Volume → Pacifica trade flow</span>
+        <span className="rounded bg-card px-2 py-1">Orderbook → Pacifica bid/ask depth</span>
+      </div>
+
       {loading && (
         <div className="flex items-center gap-3 rounded-lg border border-yellow-400/30 bg-yellow-400/5 p-4">
           <Loader2 className="h-5 w-5 animate-spin text-yellow-400" />

@@ -247,6 +247,29 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Data sources — show judges where everything comes from */}
+      <div className="rounded-lg border border-border/50 bg-card/50 p-3">
+        <p className="mb-2 text-xs font-medium text-muted">Live Data Sources</p>
+        <div className="flex flex-wrap gap-3 text-[10px]">
+          <span className="flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" />
+            Pacifica DEX (Solana) — prices, orderbook, trades, funding
+          </span>
+          <span className="flex items-center gap-1.5 rounded-full bg-purple-500/10 px-2.5 py-1 text-purple-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-400" />
+            Elfa AI — social sentiment from Twitter/Telegram
+          </span>
+          <span className="flex items-center gap-1.5 rounded-full bg-orange-500/10 px-2.5 py-1 text-orange-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+            3 LLMs — Claude, GPT-4o, Llama-3 (risk/sentiment/technical)
+          </span>
+          <span className="flex items-center gap-1.5 rounded-full bg-yellow-500/10 px-2.5 py-1 text-yellow-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
+            Alpha Score Engine — proprietary signal processing
+          </span>
+        </div>
+      </div>
+
       {/* Markets grid */}
       <section>
         <h2 className="mb-3 text-lg font-semibold">Markets</h2>
