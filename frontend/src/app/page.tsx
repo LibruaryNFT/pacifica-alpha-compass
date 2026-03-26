@@ -3,12 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  BarChart3,
   Compass,
   Brain,
   TrendingUp,
   TrendingDown,
-  Wallet,
   AlertTriangle,
   Zap,
   Target,
@@ -19,13 +17,11 @@ import PriceCard from "@/components/PriceCard";
 import Tooltip from "@/components/Tooltip";
 import {
   fetchPrices,
-  fetchPortfolio,
   fetchFundingScan,
   type MarketPrice,
-  type PortfolioSummary,
   type FundingScanResult,
 } from "@/lib/api";
-import { REFRESH_INTERVALS, TOP_MARKETS } from "@/lib/constants";
+import { REFRESH_INTERVALS } from "@/lib/constants";
 import { usePacificaWebSocket } from "@/hooks/useWebSocket";
 
 interface AlphaScoreData {
@@ -56,7 +52,6 @@ interface AlphaScoreData {
 export default function Dashboard() {
   const router = useRouter();
   const [prices, setPrices] = useState<MarketPrice[]>([]);
-  const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
   const [funding, setFunding] = useState<FundingScanResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [alphaScores, setAlphaScores] = useState<Record<string, AlphaScoreData>>({});
@@ -67,35 +62,29 @@ export default function Dashboard() {
   const { connected: wsConnected } = usePacificaWebSocket();
 
   const loadData = useCallback(async () => {
-    const [p, port, fund] = await Promise.all([
+    const [p, fund] = await Promise.all([
       fetchPrices(),
-      fetchPortfolio(),
       fetchFundingScan(),
     ]);
     setPrices(p);
-    setPortfolio(port);
     setFunding(fund);
     setLoading(false);
   }, []);
 
-  // Load Alpha Scores in parallel, display each as it arrives
+  // Load ALL Alpha Scores from precomputed cache (instant — backend refreshes every 60s)
   const loadAlphaScores = useCallback(async () => {
     setAlphaLoading(true);
-    const top4 = TOP_MARKETS.slice(0, 4);
-    const promises = top4.map(async (symbol) => {
-      try {
-        const res = await fetch(`/api/alpha-score/${symbol}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.symbol) {
-            setAlphaScores((prev) => ({ ...prev, [data.symbol]: data }));
-          }
+    try {
+      const res = await fetch("/api/alpha-scores/all");
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.scores) {
+          setAlphaScores(data.scores);
         }
-      } catch {
-        // Skip failed scores
       }
-    });
-    await Promise.allSettled(promises);
+    } catch {
+      // Precomputed endpoint unavailable — scores will show empty state
+    }
     setAlphaLoading(false);
   }, []);
 
@@ -107,8 +96,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const pnlPositive = (portfolio?.total_unrealized_pnl ?? 0) >= 0;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
@@ -165,15 +152,15 @@ export default function Dashboard() {
             Full analysis <ArrowRight className="h-3 w-3" />
           </button>
         </div>
-        {alphaLoading ? (
+        {alphaLoading && Object.keys(alphaScores).length === 0 ? (
           <div className="mt-3 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+            {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="h-44 animate-pulse rounded-xl bg-card" />
             ))}
           </div>
         ) : Object.keys(alphaScores).length > 0 ? (
           <div className="mt-3 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {Object.values(alphaScores).map((score) => (
+            {Object.values(alphaScores).slice(0, 8).map((score) => (
               <AlphaCard
                 key={score.symbol}
                 data={score}
@@ -182,51 +169,42 @@ export default function Dashboard() {
             ))}
           </div>
         ) : (
-          <div className="mt-3 rounded-xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted">
-            Alpha Scores loading — computing signals for top markets...
+          <div className="mt-3 rounded-xl border border-dashed border-border bg-card/50 p-6 text-center">
+            <Zap className="mx-auto h-8 w-8 text-yellow-400/40" />
+            <p className="mt-2 text-sm text-muted">Alpha Scores warming up</p>
+            <p className="mt-1 text-xs text-muted/60">
+              Backend precomputes scores every 60s. First load may take a moment.
+            </p>
           </div>
         )}
       </section>
 
-      {/* Portfolio summary (simulated) */}
-      {portfolio && (
-        <div className="relative">
-          <span className="absolute -top-2 right-2 z-10 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-bold text-accent">
-            SIM
-          </span>
-        </div>
-      )}
-      {portfolio && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <StatCard
-            label="Equity"
-            value={`$${portfolio.total_equity.toLocaleString()}`}
-            icon={<Wallet className="h-4 w-4 text-accent" />}
-          />
-          <StatCard
-            label="Unrealized P&L"
-            value={`${pnlPositive ? "+" : ""}$${portfolio.total_unrealized_pnl.toFixed(2)}`}
-            icon={pnlPositive ? <TrendingUp className="h-4 w-4 text-success" /> : <TrendingDown className="h-4 w-4 text-danger" />}
-            valueColor={pnlPositive ? "text-success" : "text-danger"}
-          />
-          <StatCard
-            label="Margin Used"
-            value={`$${portfolio.total_margin_used.toFixed(2)}`}
-            icon={<BarChart3 className="h-4 w-4 text-warning" />}
-          />
-          <StatCard
-            label="Available"
-            value={`$${portfolio.available_balance.toLocaleString()}`}
-            icon={<Wallet className="h-4 w-4 text-muted" />}
-          />
-          <StatCard
-            label="Portfolio Heat"
-            value={`${portfolio.portfolio_heat.toFixed(1)}%`}
-            icon={<AlertTriangle className={`h-4 w-4 ${portfolio.portfolio_heat > 50 ? "text-danger" : "text-success"}`} />}
-            valueColor={portfolio.portfolio_heat > 50 ? "text-danger" : "text-success"}
-          />
-        </div>
-      )}
+      {/* Market overview stats — real data, no simulated portfolio */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard
+          label="Bullish Signals"
+          value={`${Object.values(alphaScores).filter((s) => s.direction === "bullish").length}/${Object.keys(alphaScores).length}`}
+          icon={<TrendingUp className="h-4 w-4 text-success" />}
+          valueColor="text-success"
+        />
+        <StatCard
+          label="Bearish Signals"
+          value={`${Object.values(alphaScores).filter((s) => s.direction === "bearish").length}/${Object.keys(alphaScores).length}`}
+          icon={<TrendingDown className="h-4 w-4 text-danger" />}
+          valueColor="text-danger"
+        />
+        <StatCard
+          label="Avg Alpha Score"
+          value={Object.keys(alphaScores).length > 0 ? `${(Object.values(alphaScores).reduce((s, a) => s + a.alpha_score, 0) / Object.keys(alphaScores).length).toFixed(0)}` : "—"}
+          icon={<Zap className="h-4 w-4 text-yellow-400" />}
+        />
+        <StatCard
+          label="High Risk Markets"
+          value={`${Object.values(alphaScores).filter((s) => s.liquidation_risk?.risk_level === "high" || s.liquidation_risk?.risk_level === "critical").length}`}
+          icon={<AlertTriangle className="h-4 w-4 text-warning" />}
+          valueColor="text-warning"
+        />
+      </div>
 
       {/* Impact framing */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -251,23 +229,27 @@ export default function Dashboard() {
 
       {/* Data sources — show judges where everything comes from */}
       <div className="rounded-lg border border-border/50 bg-card/50 p-3">
-        <p className="mb-2 text-xs font-medium text-muted">Live Data Sources</p>
+        <p className="mb-2 text-xs font-medium text-muted">Live Data Pipeline</p>
         <div className="flex flex-wrap gap-3 text-[10px]">
+          <span className="flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-1 text-green-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
+            Trade Collector — WebSocket + REST polling → OHLCV candles → SQLite
+          </span>
           <span className="flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-400">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" />
-            Pacifica DEX (Solana) — prices, orderbook, trades, funding
+            Pacifica DEX (Solana) — real-time trades, prices
           </span>
           <span className="flex items-center gap-1.5 rounded-full bg-purple-500/10 px-2.5 py-1 text-purple-400">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-400" />
-            Elfa AI — social sentiment from Twitter/Telegram
+            Elfa AI — social sentiment
           </span>
           <span className="flex items-center gap-1.5 rounded-full bg-orange-500/10 px-2.5 py-1 text-orange-400">
             <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-            3 LLMs — Claude, GPT-4o, Llama-3 (risk/sentiment/technical)
+            3 LLMs — Claude, GPT-4o, Llama-3
           </span>
           <span className="flex items-center gap-1.5 rounded-full bg-yellow-500/10 px-2.5 py-1 text-yellow-400">
             <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
-            Alpha Score Engine — proprietary signal processing
+            Alpha Score Engine — 5-signal composite
           </span>
         </div>
       </div>
@@ -332,49 +314,6 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* Positions */}
-      {portfolio && portfolio.positions.length > 0 && (
-        <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-            Open Positions
-            <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-bold text-accent">SIM</span>
-          </h2>
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-card text-left text-xs text-muted">
-                  <th className="px-4 py-2">Market</th>
-                  <th className="px-4 py-2">Side</th>
-                  <th className="px-4 py-2">Size</th>
-                  <th className="px-4 py-2">Entry</th>
-                  <th className="px-4 py-2">Mark</th>
-                  <th className="px-4 py-2">P&L</th>
-                  <th className="px-4 py-2">Leverage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {portfolio.positions.map((pos) => (
-                  <tr key={pos.symbol} className="border-b border-border/50 hover:bg-card-hover">
-                    <td className="px-4 py-2 font-medium">{pos.symbol}</td>
-                    <td className="px-4 py-2">
-                      <span className={`rounded px-2 py-0.5 text-xs font-bold ${pos.side === "long" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
-                        {pos.side.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 font-mono">{pos.size}</td>
-                    <td className="px-4 py-2 font-mono">${pos.entry_price.toLocaleString()}</td>
-                    <td className="px-4 py-2 font-mono">${pos.mark_price.toLocaleString()}</td>
-                    <td className={`px-4 py-2 font-mono font-bold ${pos.unrealized_pnl >= 0 ? "text-success" : "text-danger"}`}>
-                      {pos.unrealized_pnl >= 0 ? "+" : ""}${pos.unrealized_pnl.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-2 font-mono">{pos.leverage}x</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
     </div>
   );
 }

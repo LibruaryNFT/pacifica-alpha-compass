@@ -32,6 +32,20 @@ function AIConsensusContent() {
   const [sentimentLoading, setSentimentLoading] = useState(false);
   const [history, setHistory] = useState<ConsensusResult[]>([]);
 
+  const loadHistory = async () => {
+    try {
+      const res = await fetch("/api/ai/history");
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.history?.length) {
+          setHistory(data.history);
+        }
+      }
+    } catch {
+      // History unavailable — not critical
+    }
+  };
+
   const runAnalysis = async (symbol: string) => {
     setSelectedMarket(symbol);
     setLoading(true);
@@ -46,7 +60,8 @@ function AIConsensusContent() {
       ]);
       setConsensus(aiResult);
       setSentiment(socialResult);
-      setHistory((prev) => [aiResult, ...prev.slice(0, 9)]);
+      // Refresh history from backend (includes this new result)
+      loadHistory();
     } catch (error) {
       console.error("Analysis failed:", error);
     } finally {
@@ -56,6 +71,7 @@ function AIConsensusContent() {
   };
 
   useEffect(() => {
+    loadHistory();
     runAnalysis(initialSymbol);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -117,22 +133,33 @@ function AIConsensusContent() {
         </div>
       </div>
 
-      {/* Analysis history */}
-      {history.length > 1 && (
+      {/* Persistent analysis history (from backend — survives page reloads) */}
+      {history.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-semibold">Recent Analyses</h2>
+          <h2 className="mb-3 text-lg font-semibold">
+            Analysis Timeline
+            <span className="ml-2 text-xs font-normal text-muted">
+              {history.length} analyses stored
+            </span>
+          </h2>
           <div className="space-y-2">
-            {history.slice(1).map((h, i) => {
+            {history.slice(0, 20).map((h, i) => {
               const dirColor =
                 h.direction === "bullish"
                   ? "text-success"
                   : h.direction === "bearish"
                     ? "text-danger"
                     : "text-warning";
+              const bgColor =
+                h.direction === "bullish"
+                  ? "border-success/20"
+                  : h.direction === "bearish"
+                    ? "border-danger/20"
+                    : "border-warning/20";
               return (
                 <div
-                  key={`${h.symbol}-${i}`}
-                  className="flex items-center justify-between rounded-lg border border-border bg-card p-3 text-sm"
+                  key={`${h.symbol}-${h.timestamp}-${i}`}
+                  className={`flex items-center justify-between rounded-lg border ${bgColor} bg-card p-3 text-sm`}
                 >
                   <span className="font-medium">{h.symbol}</span>
                   <span className={`font-bold ${dirColor}`}>
@@ -143,7 +170,7 @@ function AIConsensusContent() {
                     Score: {h.overall_score.toFixed(1)}/10
                   </span>
                   <span className="text-xs text-muted">
-                    {new Date(h.timestamp).toLocaleTimeString()}
+                    {h.timestamp ? new Date(h.timestamp).toLocaleString() : "—"}
                   </span>
                 </div>
               );

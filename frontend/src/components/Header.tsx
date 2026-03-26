@@ -11,6 +11,7 @@ import {
   Fish,
   ArrowRightLeft,
   Zap,
+  Bell,
   Menu,
   X,
 } from "lucide-react";
@@ -21,11 +22,12 @@ const PRIMARY_NAV = [
   { href: "/pulse", label: "Market Pulse", icon: BarChart3 },
   { href: "/alpha", label: "Alpha Score", icon: Zap },
   { href: "/ai", label: "AI Consensus", icon: Brain },
+  { href: "/alerts", label: "Alerts", icon: Bell },
 ];
 
 const SECONDARY_NAV = [
-  { href: "/backtest", label: "Backtest", icon: Compass },
   { href: "/portfolio", label: "Portfolio", icon: Wallet },
+  { href: "/backtest", label: "Backtest", icon: Compass },
   { href: "/whales", label: "Whales", icon: Fish },
   { href: "/bridge", label: "Bridge", icon: ArrowRightLeft },
 ];

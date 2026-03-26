@@ -241,6 +241,16 @@ export default function AlphaScorePage() {
                   </>
                 );
               })()}
+              {/* Execute on Pacifica */}
+              <a
+                href={`https://test-app.pacifica.fi/trade/${data.symbol.replace("-USDC", "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-medium text-background transition-colors hover:bg-primary/80"
+              >
+                Trade {data.symbol.replace("-USDC", "")} on Pacifica
+                <ArrowUpRight className="h-4 w-4" />
+              </a>
             </div>
 
             {/* Liquidation risk */}

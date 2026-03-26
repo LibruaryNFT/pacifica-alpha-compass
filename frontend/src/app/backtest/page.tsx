@@ -38,6 +38,8 @@ interface BacktestResult {
   worst_trade: number;
   sharpe_estimate: number;
   trades: BacktestTrade[];
+  data_source?: string;
+  candle_count?: number;
 }
 
 export default function BacktestPage() {
@@ -153,9 +155,9 @@ export default function BacktestPage() {
             </div>
           </div>
 
-          {/* Period info */}
+          {/* Period info + data source badge */}
           <div className="rounded-lg border border-border bg-card p-4">
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
               <BarChart3 className="h-4 w-4 text-muted" />
               <span className="text-muted">Period:</span>
               <span className="font-medium">{data.period}</span>
@@ -163,8 +165,19 @@ export default function BacktestPage() {
               <span className="text-muted">Signals:</span>
               <span className="font-medium">{data.total_signals}</span>
               <span className="text-muted">|</span>
-              <span className="text-muted">Method:</span>
-              <span className="font-medium">Alpha Score &gt;60 or &lt;40, 4h lookforward</span>
+              <span className="text-muted">Candles:</span>
+              <span className="font-medium">{data.candle_count ?? "—"}</span>
+              <span className="text-muted">|</span>
+              <span className="text-muted">Data:</span>
+              {data.data_source === "pacifica_trade_stream" ? (
+                <span className="rounded-full bg-success/20 px-2 py-0.5 text-xs font-bold text-success">
+                  Real Pacifica Trades
+                </span>
+              ) : (
+                <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-bold text-warning">
+                  Simulated
+                </span>
+              )}
             </div>
           </div>
 
@@ -226,8 +239,13 @@ export default function BacktestPage() {
           <div className="rounded-lg border border-dashed border-border bg-card/50 p-4 text-xs text-muted">
             <strong>Methodology:</strong> Alpha Score is computed at each hourly candle using only past data (no future leakage).
             Signals fire when score exceeds 60 (bullish) or drops below 40 (bearish). P&L is measured 4 hours after signal.
-            Backtest uses realistic market simulation with mean-reverting trends. Live historical candle data will be used
-            once Pacifica enables their REST candle endpoint.
+            {data.data_source === "pacifica_trade_stream" ? (
+              <> Data source: <strong className="text-success">real Pacifica trades</strong> aggregated into OHLCV candles
+              from the WebSocket trade stream. No synthetic or simulated data.</>
+            ) : (
+              <> Data source: simulated candles with mean-reverting trends. Real candle data is being collected
+              from Pacifica&apos;s trade stream — once enough history accumulates, backtests will automatically switch to real data.</>
+            )}
           </div>
         </>
       )}

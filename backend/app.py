@@ -30,6 +30,8 @@ ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
     "https://alpha-compass.vercel.app,http://localhost:3000",
 ).split(",")
+TOP_SYMBOLS = ["BTC-USDC", "ETH-USDC", "SOL-USDC", "DOGE-USDC", "ARB-USDC", "AVAX-USDC", "LINK-USDC", "OP-USDC"]
+PRECOMPUTE_INTERVAL = 60  # seconds
 
 logging.basicConfig(
     level=logging.INFO,
@@ -102,6 +104,116 @@ async def _try_live_or_mock(live_fn, mock_fn, label: str):
         return mock_fn()
 
 
+# --- Precomputed Alpha Scores (background task refreshes every 60s) ---
+_precomputed_alpha: dict[str, dict] = {}
+_alpha_last_updated: float = 0
+_consensus_history: list[dict] = []  # Last 50 AI consensus results
+MAX_HISTORY = 50
+
+# --- Alert system ---
+_alert_configs: list[dict] = [
+    # Default alerts that demonstrate the feature
+    {"id": "btc-high", "symbol": "BTC-USDC", "condition": "above", "threshold": 70, "enabled": True},
+    {"id": "btc-low", "symbol": "BTC-USDC", "condition": "below", "threshold": 30, "enabled": True},
+    {"id": "eth-high", "symbol": "ETH-USDC", "condition": "above", "threshold": 70, "enabled": True},
+    {"id": "sol-high", "symbol": "SOL-USDC", "condition": "above", "threshold": 65, "enabled": True},
+]
+_triggered_alerts: list[dict] = []  # Last 100 triggered alerts
+MAX_ALERTS = 100
+
+
+async def _precompute_alpha_scores() -> None:
+    """Background task: precompute Alpha Scores for all markets every 60s."""
+    global _alpha_last_updated
+    import dataclasses as dc
+
+    while True:
+        try:
+            for symbol in TOP_SYMBOLS:
+                try:
+                    price_data = await _try_live_or_mock(
+                        lambda s=symbol: pac.get_market_price(s),
+                        lambda s=symbol: mock_data.get_price(s),
+                        f"precompute-price/{symbol}",
+                    )
+                    # Prefer real collected candles
+                    real_candles = get_collected_candles(symbol, 3600, 168)
+                    if len(real_candles) >= 20:
+                        candles = real_candles
+                    else:
+                        candles = await _try_live_or_mock(
+                            lambda s=symbol: pac.get_historical_candles(s, "1h", 168),
+                            lambda s=symbol: mock_data.get_candles(s, "1h", 168),
+                            f"precompute-candles/{symbol}",
+                        )
+                    orderbook_data = await _try_live_or_mock(
+                        lambda s=symbol: pac.get_orderbook(s, 20),
+                        lambda s=symbol: mock_data.get_orderbook(s, 20),
+                        f"precompute-ob/{symbol}",
+                    )
+
+                    price = float(price_data.get("price", price_data.get("markPrice", price_data.get("lastPrice", 0))))
+                    funding = float(price_data.get("fundingRate", 0))
+                    change = float(price_data.get("change24h", price_data.get("priceChange24h", 0)))
+                    volume = float(price_data.get("volume24h", price_data.get("volume", 0)))
+                    oi = float(price_data.get("openInterest", 0))
+                    candle_list = candles if isinstance(candles, list) else candles.get("data", [])
+
+                    result = compute_alpha_score(
+                        symbol=symbol,
+                        price=price,
+                        candles=candle_list,
+                        orderbook=orderbook_data if isinstance(orderbook_data, dict) else {"bids": [], "asks": []},
+                        funding_rate=funding,
+                        change_24h=change,
+                        volume_24h=volume,
+                        open_interest=oi,
+                    )
+                    result_dict = dc.asdict(result)
+                    _precomputed_alpha[symbol] = result_dict
+                    _cache_set(f"alpha_score:{symbol}", result_dict)
+                except Exception as e:
+                    logger.warning(f"Precompute failed for {symbol}: {e}")
+
+            _alpha_last_updated = time.time()
+            # Check alert conditions
+            for cfg in _alert_configs:
+                if not cfg.get("enabled"):
+                    continue
+                score_data = _precomputed_alpha.get(cfg["symbol"])
+                if not score_data:
+                    continue
+                alpha = score_data.get("alpha_score", 50)
+                triggered = False
+                if cfg["condition"] == "above" and alpha >= cfg["threshold"]:
+                    triggered = True
+                elif cfg["condition"] == "below" and alpha <= cfg["threshold"]:
+                    triggered = True
+                if triggered:
+                    alert = {
+                        "id": cfg["id"],
+                        "symbol": cfg["symbol"],
+                        "condition": cfg["condition"],
+                        "threshold": cfg["threshold"],
+                        "actual_score": alpha,
+                        "direction": score_data.get("direction", "neutral"),
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    # Avoid duplicate consecutive alerts for same config
+                    if not _triggered_alerts or _triggered_alerts[0].get("id") != cfg["id"]:
+                        _triggered_alerts.insert(0, alert)
+                        if len(_triggered_alerts) > MAX_ALERTS:
+                            _triggered_alerts.pop()
+                        logger.info(
+                            f"Alert triggered: {cfg['symbol']} alpha={alpha:.0f} {cfg['condition']} {cfg['threshold']}"
+                        )
+            logger.info(f"Precomputed Alpha Scores for {len(_precomputed_alpha)} markets")
+        except Exception as e:
+            logger.error(f"Alpha precompute loop error: {e}")
+
+        await asyncio.sleep(PRECOMPUTE_INTERVAL)
+
+
 # --- App setup ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -109,7 +221,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"Demo mode: {DEMO_MODE}")
     if not DEMO_MODE:
         logger.info(f"API base: {pac.API_BASE}")
+    # Start background tasks
+    alpha_task = asyncio.create_task(_precompute_alpha_scores())
+    candle_task = asyncio.create_task(start_candle_collector())
     yield
+    alpha_task.cancel()
+    candle_task.cancel()
     logger.info("Shutting down...")
 
 
@@ -222,6 +339,34 @@ async def get_trades(symbol: str, limit: int = 50):
         lambda: mock_data.get_recent_trades(symbol, limit),
         f"trades/{symbol}",
     )
+
+
+# --- Real Candles (from collector) ---
+
+
+@app.get("/api/collected-candles/{symbol}")
+async def collected_candles(symbol: str, interval: str = "1h", limit: int = 500):
+    """Get real OHLCV candles built from Pacifica trade stream.
+
+    Unlike Pacifica's missing /candles endpoint, these are aggregated
+    from actual trades via WebSocket + REST polling.
+    """
+    interval_map = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400}
+    interval_s = interval_map.get(interval, 3600)
+    candles = get_collected_candles(symbol, interval_s, limit)
+    return {
+        "symbol": symbol,
+        "interval": interval,
+        "count": len(candles),
+        "source": "pacifica_trade_stream",
+        "candles": candles,
+    }
+
+
+@app.get("/api/candle-stats")
+async def candle_stats():
+    """Get candle collection statistics."""
+    return get_candle_stats()
 
 
 # --- Funding Rates ---
@@ -389,6 +534,11 @@ async def ai_consensus(symbol: str, _: None = Depends(verify_api_key)) -> Consen
                 low_24h=float(price_data.get("low24h", price_data.get("low", 0))),
             )
         _cache_set(cache_key, result)
+        # Store in history
+        history_entry = result.model_dump() if hasattr(result, "model_dump") else result.__dict__
+        _consensus_history.insert(0, history_entry)
+        if len(_consensus_history) > MAX_HISTORY:
+            _consensus_history.pop()
         return result
 
     except HTTPException:
@@ -494,6 +644,71 @@ async def alpha_score(symbol: str, _: None = Depends(verify_api_key)):
         raise HTTPException(status_code=500, detail=f"Alpha Score failed: {e}")
 
 
+@app.get("/api/alpha-scores/all")
+async def all_alpha_scores(_: None = Depends(verify_api_key)):
+    """Return all precomputed Alpha Scores instantly (updated every 60s)."""
+    return {
+        "scores": _precomputed_alpha,
+        "last_updated": datetime.fromtimestamp(_alpha_last_updated).isoformat() if _alpha_last_updated else None,
+        "count": len(_precomputed_alpha),
+    }
+
+
+# --- AI Consensus History ---
+
+
+@app.get("/api/ai/history")
+async def ai_history(_: None = Depends(verify_api_key)):
+    """Return recent AI consensus results (last 50)."""
+    return {"history": _consensus_history, "count": len(_consensus_history)}
+
+
+# --- Alerts ---
+
+
+@app.get("/api/alerts")
+async def get_alerts(_: None = Depends(verify_api_key)):
+    """Get alert configs and triggered alerts."""
+    return {
+        "configs": _alert_configs,
+        "triggered": _triggered_alerts,
+        "triggered_count": len(_triggered_alerts),
+    }
+
+
+@app.post("/api/alerts")
+async def create_alert(request: Request, _: None = Depends(verify_api_key)):
+    """Create a new alert config."""
+    body = await request.json()
+    symbol = validate_symbol(body.get("symbol", ""))
+    condition = body.get("condition", "above")
+    threshold = float(body.get("threshold", 70))
+
+    if condition not in ("above", "below"):
+        raise HTTPException(status_code=400, detail="Condition must be 'above' or 'below'")
+    if not (0 <= threshold <= 100):
+        raise HTTPException(status_code=400, detail="Threshold must be 0-100")
+
+    alert_id = f"{symbol.lower()}-{condition}-{int(threshold)}-{int(time.time())}"
+    config = {
+        "id": alert_id,
+        "symbol": symbol,
+        "condition": condition,
+        "threshold": threshold,
+        "enabled": True,
+    }
+    _alert_configs.append(config)
+    return config
+
+
+@app.delete("/api/alerts/{alert_id}")
+async def delete_alert(alert_id: str, _: None = Depends(verify_api_key)):
+    """Delete an alert config."""
+    global _alert_configs
+    _alert_configs = [a for a in _alert_configs if a["id"] != alert_id]
+    return {"deleted": alert_id}
+
+
 # --- Backtesting ---
 
 
@@ -507,12 +722,21 @@ async def backtest(symbol: str, _: None = Depends(verify_api_key)):
         return cached
 
     try:
-        candles = await _try_live_or_mock(
-            lambda: pac.get_historical_candles(symbol, "1h", 500),
-            lambda: mock_data.get_candles(symbol, "1h", 500),
-            f"backtest-candles/{symbol}",
-        )
-        candle_list = candles if isinstance(candles, list) else candles.get("data", [])
+        # Prefer real collected candles over mock data
+        real_candles = get_collected_candles(symbol, 3600, 500)
+        if len(real_candles) >= 50:
+            candle_list = real_candles
+            data_source = "pacifica_trade_stream"
+            logger.info(f"Backtest using {len(real_candles)} real candles for {symbol}")
+        else:
+            candles = await _try_live_or_mock(
+                lambda: pac.get_historical_candles(symbol, "1h", 500),
+                lambda: mock_data.get_candles(symbol, "1h", 500),
+                f"backtest-candles/{symbol}",
+            )
+            candle_list = candles if isinstance(candles, list) else candles.get("data", [])
+            data_source = "simulated"
+            logger.info(f"Backtest using simulated candles for {symbol} (only {len(real_candles)} real)")
 
         import dataclasses as dc
 
@@ -520,6 +744,8 @@ async def backtest(symbol: str, _: None = Depends(verify_api_key)):
 
         result = _run_backtest(symbol=symbol, candles=candle_list)
         result_dict = dc.asdict(result)
+        result_dict["data_source"] = data_source
+        result_dict["candle_count"] = len(candle_list)
         _cache_set(cache_key, result_dict)
         return result_dict
 
