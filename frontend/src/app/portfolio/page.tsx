@@ -53,10 +53,29 @@ export default function PortfolioPage() {
   );
 }
 
+interface PacificaPosition {
+  symbol: string;
+  side: string;
+  size: number;
+  entry_price: number;
+  unrealized_pnl: number;
+  leverage: number;
+}
+
+interface PacificaOrder {
+  symbol: string;
+  side: string;
+  size: number;
+  price: number;
+  order_type: string;
+}
+
 function PortfolioContent() {
   const { ready, authenticated, login, user } = usePrivy();
   const [alphaScores, setAlphaScores] = useState<Record<string, AlphaScore>>({});
   const [balance, setBalance] = useState<WalletBalance | null>(null);
+  const [positions, setPositions] = useState<PacificaPosition[]>([]);
+  const [orders, setOrders] = useState<PacificaOrder[]>([]);
   const [loading, setLoading] = useState(false);
 
   const wallet = user?.linkedAccounts?.find((a) => a.type === "wallet");
@@ -103,6 +122,45 @@ function PortfolioContent() {
         }
       } catch {
         // RPC unavailable
+      }
+
+      // Fetch REAL positions from Pacifica (public API — no auth needed!)
+      try {
+        const posRes = await fetch(`https://api.pacifica.fi/api/v1/positions?account=${address}`);
+        if (posRes.ok) {
+          const posData = await posRes.json();
+          if (posData?.success && Array.isArray(posData.data)) {
+            setPositions(posData.data.map((p: Record<string, unknown>) => ({
+              symbol: String(p.symbol || p.market || ""),
+              side: String(p.side || ""),
+              size: Number(p.size || p.amount || 0),
+              entry_price: Number(p.entry_price || p.entryPrice || 0),
+              unrealized_pnl: Number(p.unrealized_pnl || p.pnl || 0),
+              leverage: Number(p.leverage || 1),
+            })));
+          }
+        }
+      } catch {
+        // Positions unavailable
+      }
+
+      // Fetch REAL open orders from Pacifica
+      try {
+        const ordRes = await fetch(`https://api.pacifica.fi/api/v1/orders?account=${address}`);
+        if (ordRes.ok) {
+          const ordData = await ordRes.json();
+          if (ordData?.success && Array.isArray(ordData.data)) {
+            setOrders(ordData.data.map((o: Record<string, unknown>) => ({
+              symbol: String(o.symbol || o.market || ""),
+              side: String(o.side || ""),
+              size: Number(o.size || o.amount || 0),
+              price: Number(o.price || 0),
+              order_type: String(o.order_type || o.type || "limit"),
+            })));
+          }
+        }
+      } catch {
+        // Orders unavailable
       }
     }
     setLoading(false);
@@ -364,6 +422,85 @@ function PortfolioContent() {
           </table>
         </div>
       </section>
+
+      {/* Real Pacifica Positions (from public API) */}
+      {positions.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+            <Wallet className="h-5 w-5 text-primary" />
+            Your Pacifica Positions
+            <span className="rounded-full bg-success/20 px-2 py-0.5 text-[10px] font-bold text-success">LIVE</span>
+          </h2>
+          <div className="space-y-3">
+            {positions.map((pos, i) => (
+              <div key={`${pos.symbol}-${i}`} className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-bold">{pos.symbol}</span>
+                    <span className={`rounded px-2 py-0.5 text-xs font-bold ${pos.side.includes("long") ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
+                      {pos.side.toUpperCase()} {pos.leverage}x
+                    </span>
+                  </div>
+                  <span className={`font-mono text-lg font-bold ${pos.unrealized_pnl >= 0 ? "text-success" : "text-danger"}`}>
+                    {pos.unrealized_pnl >= 0 ? "+" : ""}${pos.unrealized_pnl.toFixed(2)}
+                  </span>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-3 text-xs text-muted">
+                  <div>Size: <span className="font-mono text-foreground">{pos.size}</span></div>
+                  <div>Entry: <span className="font-mono text-foreground">${pos.entry_price.toLocaleString()}</span></div>
+                  <div>Leverage: <span className="font-mono text-foreground">{pos.leverage}x</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Real Pacifica Orders */}
+      {orders.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+            Open Orders
+            <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">LIVE</span>
+          </h2>
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-card text-left text-xs text-muted">
+                  <th className="px-4 py-2">Market</th>
+                  <th className="px-4 py-2">Side</th>
+                  <th className="px-4 py-2">Size</th>
+                  <th className="px-4 py-2">Price</th>
+                  <th className="px-4 py-2">Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((ord, i) => (
+                  <tr key={`${ord.symbol}-${i}`} className="border-b border-border/30">
+                    <td className="px-4 py-2 font-medium">{ord.symbol}</td>
+                    <td className="px-4 py-2">
+                      <span className={`rounded px-2 py-0.5 text-xs font-bold ${ord.side.includes("long") || ord.side.includes("buy") ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
+                        {ord.side.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 font-mono">{ord.size}</td>
+                    <td className="px-4 py-2 font-mono">${ord.price.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-xs text-muted">{ord.order_type}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* No positions message */}
+      {positions.length === 0 && authenticated && !loading && (
+        <div className="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center">
+          <p className="text-sm text-muted">No open positions found on Pacifica for this wallet.</p>
+          <p className="mt-1 text-xs text-muted/60">Trade on Pacifica DEX to see your positions here — data is pulled live from the blockchain.</p>
+        </div>
+      )}
 
       {/* One-click trade execution section */}
       <section>
