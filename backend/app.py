@@ -174,7 +174,9 @@ async def _precompute_alpha_scores() -> None:
             for symbol, score_data in _precomputed_alpha.items():
                 alpha = score_data.get("alpha_score", 50)
                 direction = score_data.get("direction", "neutral")
-                triggered = alert_check(symbol, alpha, direction)
+                from services.alert_store import check_and_trigger
+
+                triggered = check_and_trigger(symbol, alpha, direction)
                 for t in triggered:
                     logger.info(
                         f"Alert triggered: {t['symbol']} alpha={t['actual_score']:.0f} {t['condition']} {t['threshold']}"
@@ -190,6 +192,8 @@ async def _precompute_alpha_scores() -> None:
                         )
                     except (ValueError, TypeError):
                         pass
+            from services.order_intent import resolve_intents
+
             resolved = resolve_intents(current_prices)
             if resolved > 0:
                 logger.info(f"Resolved {resolved} order intents")
@@ -656,10 +660,14 @@ async def ai_history(_: None = Depends(verify_api_key)):
 @app.get("/api/alerts")
 async def get_alerts(_: None = Depends(verify_api_key)):
     """Get alert configs and triggered alerts (persistent across restarts)."""
+    from services.alert_store import get_configs, get_triggered
+
+    configs = get_configs()
+    triggered = get_triggered(100)
     return {
-        "configs": alert_get_configs(),
-        "triggered": alert_get_triggered(100),
-        "triggered_count": len(alert_get_triggered(100)),
+        "configs": configs,
+        "triggered": triggered,
+        "triggered_count": len(triggered),
     }
 
 
@@ -677,13 +685,17 @@ async def create_alert(request: Request, _: None = Depends(verify_api_key)):
     if not (0 <= threshold <= 100):
         raise HTTPException(status_code=400, detail="Threshold must be 0-100")
 
-    return alert_create(symbol, condition, threshold, discord_webhook)
+    from services.alert_store import create_config
+
+    return create_config(symbol, condition, threshold, discord_webhook)
 
 
 @app.delete("/api/alerts/{alert_id}")
 async def delete_alert(alert_id: str, _: None = Depends(verify_api_key)):
     """Delete an alert config."""
-    alert_delete(alert_id)
+    from services.alert_store import delete_config
+
+    delete_config(alert_id)
     return {"deleted": alert_id}
 
 
@@ -737,6 +749,8 @@ async def create_order_intent(request: Request, _: None = Depends(verify_api_key
     """Create an order intent from Alpha Score signal."""
     body = await request.json()
     symbol = validate_symbol(body.get("symbol", ""))
+    from services.order_intent import create_intent
+
     return create_intent(
         symbol=symbol,
         side=body.get("side", "long"),
@@ -754,6 +768,8 @@ async def create_order_intent(request: Request, _: None = Depends(verify_api_key
 @app.get("/api/orders/intents")
 async def list_order_intents(_: None = Depends(verify_api_key)):
     """List order intents with paper trading stats."""
+    from services.order_intent import get_intent_stats, get_intents
+
     return {
         "intents": get_intents(50),
         "stats": get_intent_stats(),
