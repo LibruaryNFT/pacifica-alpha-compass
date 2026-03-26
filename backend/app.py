@@ -34,6 +34,7 @@ ALLOWED_ORIGINS = os.getenv(
     "https://alpha-compass.vercel.app,http://localhost:3000",
 ).split(",")
 TOP_SYMBOLS = ["BTC-USDC", "ETH-USDC", "SOL-USDC", "DOGE-USDC", "ARB-USDC", "AVAX-USDC", "LINK-USDC", "OP-USDC"]
+ALLOWED_SYMBOLS = set(TOP_SYMBOLS)  # Only these symbols can trigger AI/expensive calls
 PRECOMPUTE_INTERVAL = 60  # seconds
 
 logging.basicConfig(
@@ -73,14 +74,15 @@ _ai_semaphore = asyncio.Semaphore(3)
 # --- Rate limiter (per-IP, in-memory) ---
 _rate_limits: dict[str, list[float]] = defaultdict(list)
 RATE_LIMIT_WINDOW = 60  # seconds
-RATE_LIMIT_MAX = 30  # max requests per window for expensive endpoints
+RATE_LIMIT_MAX = 30  # max requests per window for general endpoints
+AI_RATE_LIMIT_MAX = 5  # max AI calls per minute per IP (prevents credit burn)
 
 
-def _check_rate_limit(client_ip: str) -> None:
+def _check_rate_limit(client_ip: str, max_requests: int = RATE_LIMIT_MAX) -> None:
     now = time.time()
     # Clean old entries
     _rate_limits[client_ip] = [t for t in _rate_limits[client_ip] if now - t < RATE_LIMIT_WINDOW]
-    if len(_rate_limits[client_ip]) >= RATE_LIMIT_MAX:
+    if len(_rate_limits[client_ip]) >= max_requests:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
     _rate_limits[client_ip].append(now)
 
@@ -478,9 +480,15 @@ def verify_api_key(request: Request, x_internal_key: str = Header(default="")):
 
 
 @app.get("/api/ai/consensus/{symbol}")
-async def ai_consensus(symbol: str, _: None = Depends(verify_api_key)) -> ConsensusResult:
+async def ai_consensus(symbol: str, request: Request, _: None = Depends(verify_api_key)) -> ConsensusResult:
     """Run 3 AI models and return consensus analysis for a market."""
     symbol = validate_symbol(symbol)
+    # Only allow known symbols (prevents cache-bypass attacks with random symbols)
+    if symbol not in ALLOWED_SYMBOLS:
+        raise HTTPException(status_code=400, detail=f"AI analysis not available for {symbol}")
+    # Stricter rate limit for AI (5/min vs 30/min for general)
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"ai:{client_ip}", AI_RATE_LIMIT_MAX)
     # Check cache first (AI calls are expensive)
     cache_key = f"ai_consensus:{symbol}"
     cached = _cache_get(cache_key, AI_CACHE_TTL)
