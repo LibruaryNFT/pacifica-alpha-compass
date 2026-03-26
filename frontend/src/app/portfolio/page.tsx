@@ -100,14 +100,19 @@ export default function PortfolioPage() {
       if (posRes.ok) {
         const posData = await posRes.json();
         if (posData?.success && Array.isArray(posData.data)) {
-          setPositions(posData.data.map((p: Record<string, unknown>) => ({
-            symbol: String(p.symbol || p.market || ""),
-            side: String(p.side || ""),
-            size: Number(p.size || p.amount || 0),
-            entry_price: Number(p.entry_price || p.entryPrice || 0),
-            unrealized_pnl: Number(p.unrealized_pnl || p.pnl || 0),
-            leverage: Number(p.leverage || 1),
-          })));
+          setPositions(posData.data.map((p: Record<string, unknown>) => {
+            // Pacifica uses "bid"=long, "ask"=short
+            const rawSide = String(p.side || "");
+            const side = rawSide === "bid" ? "long" : rawSide === "ask" ? "short" : rawSide;
+            return {
+              symbol: String(p.symbol || ""),
+              side,
+              size: Math.abs(Number(p.amount || p.size || 0)),
+              entry_price: Number(p.entry_price || p.entryPrice || 0),
+              unrealized_pnl: Number(p.unrealized_pnl || p.funding || 0),
+              leverage: Number(p.leverage || 0),
+            };
+          }));
         }
       }
     } catch { /* unavailable */ }
@@ -182,7 +187,7 @@ export default function PortfolioPage() {
           <div className="mt-6 flex w-full max-w-lg gap-2">
             <input
               type="text"
-              placeholder="Solana wallet address (e.g. 7xKX...)"
+              placeholder="e.g. YjCD9Gek6MVY9t3MLEGYYdZLeaF6MZrpgZraayWsv9E"
               value={addressInput}
               onChange={(e) => setAddressInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleConnect()}
@@ -197,7 +202,17 @@ export default function PortfolioPage() {
             </button>
           </div>
           {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-          <p className="mt-3 text-[10px] text-muted">
+          <button
+            onClick={() => {
+              setAddressInput("YjCD9Gek6MVY9t3MLEGYYdZLeaF6MZrpgZraayWsv9E");
+              setAddress("YjCD9Gek6MVY9t3MLEGYYdZLeaF6MZrpgZraayWsv9E");
+              loadData("YjCD9Gek6MVY9t3MLEGYYdZLeaF6MZrpgZraayWsv9E");
+            }}
+            className="mt-3 text-xs text-primary hover:underline"
+          >
+            Try example: Top Pacifica trader (2 positions, 13 orders)
+          </button>
+          <p className="mt-2 text-[10px] text-muted">
             Read-only — we never sign transactions or access private keys
           </p>
         </div>
