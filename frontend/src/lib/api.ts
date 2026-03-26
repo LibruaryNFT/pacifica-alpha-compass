@@ -200,17 +200,18 @@ export async function fetchOrderbook(symbol: string): Promise<unknown> {
 }
 
 export async function fetchFundingRate(symbol: string): Promise<unknown> {
-  return pacificaFetch(`/funding-rate?symbol=${symbol}`, () => ({ symbol, rate: 0 }));
+  // funding-rate endpoint is 404 on Pacifica — use mock directly
+  return { symbol, rate: 0 };
 }
 
 export async function fetchRecentTrades(symbol: string, limit = 50): Promise<unknown[]> {
   return pacificaFetch(`/trades?symbol=${symbol}&limit=${limit}`, () => []);
 }
 
-// Funding scan: fetch all funding rates and compute opportunities client-side
+// Funding scan: Pacifica /funding-rate is 404 — use mock
 export async function fetchFundingScan(): Promise<FundingScanResult> {
   try {
-    const rates = await pacificaFetch<unknown[]>("/funding-rate", () => []);
+    const rates: unknown[] = [];
     if (!Array.isArray(rates) || rates.length === 0) {
       return { opportunities: [], average_rate: 0 };
     }

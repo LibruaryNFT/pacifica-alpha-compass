@@ -101,10 +101,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData();
+    // Fire alpha scores in background — don't block page render
     loadAlphaScores();
     const interval = setInterval(loadData, REFRESH_INTERVALS.PRICES);
     return () => clearInterval(interval);
-  }, [loadData, loadAlphaScores]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pnlPositive = (portfolio?.total_unrealized_pnl ?? 0) >= 0;
 
