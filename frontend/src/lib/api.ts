@@ -151,14 +151,34 @@ async function pacificaFetch<T>(path: string, fallback: () => T): Promise<T> {
 // --- Pacifica Direct (public market data — no auth needed) ---
 
 export async function fetchPrices(): Promise<MarketPrice[]> {
-  const data = await pacificaFetch<unknown>("/market-price", () => mockPrices() as unknown);
-  // Normalize Pacifica response format to our interface
-  if (Array.isArray(data)) {
-    return (data as Record<string, unknown>[]).map(normalizePrice);
+  // market-price endpoint is 404, build prices from /trades
+  const symbols = ["BTC", "ETH", "SOL", "DOGE", "ARB", "AVAX", "LINK", "OP"];
+  try {
+    const results = await Promise.allSettled(
+      symbols.map(async (sym) => {
+        const res = await fetch(`${PACIFICA_API}/trades?symbol=${sym}&limit=1`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        const trades = data?.data;
+        if (!trades?.length) return null;
+        return {
+          symbol: `${sym}-USDC`,
+          price: parseFloat(trades[0].price),
+          markPrice: parseFloat(trades[0].price),
+        };
+      })
+    );
+    const prices: MarketPrice[] = [];
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value) {
+        prices.push(normalizePrice(r.value as Record<string, unknown>));
+      }
+    }
+
+    return prices.length > 0 ? prices : mockPrices();
+  } catch {
+    return mockPrices();
   }
-  const rec = data as Record<string, unknown>;
-  const list = (rec.data ?? rec.prices ?? []) as Record<string, unknown>[];
-  return list.map(normalizePrice);
 }
 
 export async function fetchPrice(symbol: string): Promise<MarketPrice> {

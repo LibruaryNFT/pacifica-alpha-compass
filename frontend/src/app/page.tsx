@@ -78,11 +78,11 @@ export default function Dashboard() {
     setLoading(false);
   }, []);
 
-  // Load Alpha Scores one by one so cards appear progressively
+  // Load Alpha Scores in parallel, display each as it arrives
   const loadAlphaScores = useCallback(async () => {
     setAlphaLoading(true);
     const top4 = TOP_MARKETS.slice(0, 4);
-    for (const symbol of top4) {
+    const promises = top4.map(async (symbol) => {
       try {
         const res = await fetch(`/api/alpha-score/${symbol}`);
         if (res.ok) {
@@ -94,7 +94,8 @@ export default function Dashboard() {
       } catch {
         // Skip failed scores
       }
-    }
+    });
+    await Promise.allSettled(promises);
     setAlphaLoading(false);
   }, []);
 
