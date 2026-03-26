@@ -3,72 +3,61 @@
 import { useEffect, useState, useRef } from "react";
 import { Activity } from "lucide-react";
 
-interface MarketHeat {
-  symbol: string;
-  price: number;
-  change24h: number;
-  volume24h: number;
-  fundingRate: number;
-}
-
 const SYMBOLS = ["BTC", "ETH", "SOL", "DOGE", "ARB", "AVAX", "LINK", "OP"];
 
-function heatColor(value: number): string {
-  if (value > 2) return "#22c55e";
-  if (value > 0.5) return "#86efac";
-  if (value > -0.5) return "#eab308";
-  if (value > -2) return "#fca5a5";
-  return "#ef4444";
+interface MarketState {
+  symbol: string;
+  price: number;
+  trades: number;
+  buys: number;
+  momentum: number; // 0-100, 50=neutral, >50=bullish, <50=bearish
+  lastFlash: number; // timestamp of last trade (for flash animation)
+  lastSide: string;
 }
 
 export default function PulsePage() {
-  const [markets, setMarkets] = useState<MarketHeat[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [markets, setMarkets] = useState<Record<string, MarketState>>({});
   const [wsConnected, setWsConnected] = useState(false);
-  const [tradeCounts, setTradeCounts] = useState<Record<string, { count: number; buys: number }>>({});
-  const tradeCountsRef = useRef(tradeCounts);
-  tradeCountsRef.current = tradeCounts;
+  const marketsRef = useRef(markets);
+  marketsRef.current = markets;
 
-  // Load prices from trades endpoint (market-price is 404)
+  // Initialize with prices from trades endpoint
   useEffect(() => {
-    async function loadPrices() {
-      try {
-        const results = await Promise.allSettled(
-          SYMBOLS.map(async (sym) => {
-            const res = await fetch(`https://api.pacifica.fi/api/v1/trades?symbol=${sym}&limit=1`);
-            if (!res.ok) return null;
-            const data = await res.json();
-            const trades = data?.data || [];
-            if (trades.length === 0) return null;
-            return { symbol: `${sym}-USDC`, price: parseFloat(trades[0].price) };
-          })
-        );
+    async function init() {
+      const results = await Promise.allSettled(
+        SYMBOLS.map(async (sym) => {
+          const res = await fetch(`https://api.pacifica.fi/api/v1/trades?symbol=${sym}&limit=20`);
+          if (!res.ok) return { sym, price: 0, buys: 10, total: 20 };
+          const data = await res.json();
+          const trades = data?.data || [];
+          const price = trades.length > 0 ? parseFloat(trades[0].price) : 0;
+          const buys = trades.filter((t: Record<string, string>) =>
+            t.side?.includes("open_long") || t.side?.includes("close_short")
+          ).length;
+          return { sym, price, buys, total: trades.length };
+        })
+      );
 
-        const heat: MarketHeat[] = results
-          .filter((r): r is PromiseFulfilledResult<{ symbol: string; price: number } | null> => r.status === "fulfilled" && r.value !== null)
-          .map((r) => ({
-            symbol: r.value!.symbol,
-            price: r.value!.price,
-            change24h: 0, // Can't get from trades endpoint
-            volume24h: 0,
-            fundingRate: 0,
-          }));
-
-        if (heat.length > 0) {
-          setMarkets(heat);
-        }
-        setLoading(false);
-      } catch {
-        setLoading(false);
+      const initial: Record<string, MarketState> = {};
+      for (const r of results) {
+        if (r.status !== "fulfilled" || !r.value) continue;
+        const { sym, price, buys, total } = r.value;
+        initial[sym] = {
+          symbol: `${sym}-USDC`,
+          price,
+          trades: total,
+          buys,
+          momentum: total > 0 ? (buys / total) * 100 : 50,
+          lastFlash: 0,
+          lastSide: "",
+        };
       }
+      setMarkets(initial);
     }
-
-    loadPrices();
-    const interval = setInterval(loadPrices, 15000);
-    return () => clearInterval(interval);
+    init();
   }, []);
 
-  // WebSocket for live trade counting
+  // WebSocket for live updates
   useEffect(() => {
     const ws = new WebSocket("wss://ws.pacifica.fi/ws");
     ws.onopen = () => {
@@ -81,20 +70,45 @@ export default function PulsePage() {
       }, 30000);
       ws.addEventListener("close", () => clearInterval(ping));
     };
+
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
         if (msg.channel !== "trades" || !msg.data?.length) return;
+
         for (const raw of msg.data) {
-          const sym = raw.s;
+          const sym = raw.s as string;
+          const price = parseFloat(raw.p);
           const isBuy = raw.d?.includes("open_long") || raw.d?.includes("close_short");
-          setTradeCounts((prev) => {
-            const cur = prev[sym] || { count: 0, buys: 0 };
-            return { ...prev, [sym]: { count: cur.count + 1, buys: cur.buys + (isBuy ? 1 : 0) } };
+
+          setMarkets((prev) => {
+            const cur = prev[sym] || {
+              symbol: `${sym}-USDC`, price: 0, trades: 0, buys: 0,
+              momentum: 50, lastFlash: 0, lastSide: "",
+            };
+
+            const newTrades = cur.trades + 1;
+            const newBuys = cur.buys + (isBuy ? 1 : 0);
+            // Exponential moving average for momentum (smooth, doesn't reset)
+            const newMomentum = cur.momentum * 0.92 + (isBuy ? 100 : 0) * 0.08;
+
+            return {
+              ...prev,
+              [sym]: {
+                ...cur,
+                price: price > 0 ? price : cur.price,
+                trades: newTrades,
+                buys: newBuys,
+                momentum: newMomentum,
+                lastFlash: Date.now(),
+                lastSide: isBuy ? "buy" : "sell",
+              },
+            };
           });
         }
       } catch { /* ignore */ }
     };
+
     ws.onclose = () => setWsConnected(false);
     ws.onerror = () => ws.close();
     return () => { ws.onclose = null; ws.close(); };
@@ -109,114 +123,103 @@ export default function PulsePage() {
             Market Pulse
           </h1>
           <p className="mt-1 text-sm text-muted">
-            All Pacifica markets at a glance — price, momentum, funding, and live trade flow
+            Live momentum across all Pacifica markets — bar fills green for buying, red for selling
           </p>
         </div>
         <span className="flex items-center gap-1.5 text-xs text-muted">
           <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-success animate-pulse" : "bg-warning"}`} />
-          {wsConnected ? "Live trades" : "Connecting..."}
+          {wsConnected ? "Live" : "Connecting..."}
         </span>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted">
-        <span>Card color = 24h change</span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded" style={{ background: "#ef4444" }} /> Down
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded" style={{ background: "#eab308" }} /> Flat
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded" style={{ background: "#22c55e" }} /> Up
-        </span>
-        <span>|</span>
-        <span>Bar = live buy/sell pressure from WebSocket</span>
-      </div>
-
-      {/* Heatmap grid */}
-      {loading ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-40 animate-pulse rounded-xl bg-card" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {markets.map((m) => {
-            const color = heatColor(m.change24h);
-            const sym = m.symbol.replace("-USDC", "");
-            const tc = tradeCounts[sym] || { count: 0, buys: 0 };
-            const buyPct = tc.count > 0 ? (tc.buys / tc.count) * 100 : 50;
-
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {SYMBOLS.map((sym) => {
+          const m = markets[sym];
+          if (!m) {
             return (
-              <div
-                key={m.symbol}
-                className="relative overflow-hidden rounded-xl border p-4 transition-all hover:scale-[1.02] hover:shadow-lg"
-                style={{
-                  background: `linear-gradient(135deg, ${color}12, ${color}06)`,
-                  borderColor: `${color}40`,
-                }}
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold">{sym}</span>
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                    style={{ background: `${color}20`, color }}
-                  >
-                    {m.change24h >= 0 ? "+" : ""}{m.change24h.toFixed(2)}%
-                  </span>
-                </div>
-
-                {/* Price */}
-                <p className="mt-1 font-mono text-2xl font-bold">
-                  ${m.price >= 1000
-                    ? m.price.toLocaleString(undefined, { maximumFractionDigits: 0 })
-                    : m.price >= 1
-                      ? m.price.toFixed(2)
-                      : m.price.toFixed(4)}
-                </p>
-
-                {/* Funding */}
-                <p className="mt-2 text-xs text-muted">
-                  Funding: <span className={m.fundingRate > 0 ? "text-success" : m.fundingRate < 0 ? "text-danger" : "text-muted"}>
-                    {(m.fundingRate * 100).toFixed(3)}%
-                  </span>
-                </p>
-
-                {/* Live trade bar */}
-                <div className="mt-2">
-                  <div className="flex items-center justify-between text-[10px] text-muted">
-                    <span>{tc.count} trades</span>
-                    <span>{buyPct.toFixed(0)}% buy</span>
-                  </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-danger/20">
-                    <div
-                      className="h-full rounded-full bg-success/70 transition-all duration-500"
-                      style={{ width: `${buyPct}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Volume */}
-                <p className="mt-2 text-[10px] text-muted">
-                  Vol: ${m.volume24h >= 1e9
-                    ? `${(m.volume24h / 1e9).toFixed(1)}B`
-                    : m.volume24h >= 1e6
-                      ? `${(m.volume24h / 1e6).toFixed(0)}M`
-                      : `${(m.volume24h / 1e3).toFixed(0)}K`}
-                </p>
-              </div>
+              <div key={sym} className="h-36 animate-pulse rounded-xl bg-card" />
             );
-          })}
-        </div>
-      )}
+          }
+
+          const isBullish = m.momentum > 55;
+          const isBearish = m.momentum < 45;
+          const flashAge = Date.now() - m.lastFlash;
+          const isFlashing = flashAge < 1500;
+          const flashColor = m.lastSide === "buy" ? "ring-success/50" : "ring-danger/50";
+
+          return (
+            <div
+              key={sym}
+              className={`rounded-xl border border-border bg-card p-4 transition-all duration-300 ${
+                isFlashing ? `ring-2 ${flashColor}` : ""
+              }`}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-bold">{sym}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  isBullish ? "bg-success/10 text-success" : isBearish ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"
+                }`}>
+                  {isBullish ? "BULLISH" : isBearish ? "BEARISH" : "NEUTRAL"}
+                </span>
+              </div>
+
+              {/* Price */}
+              <p className="mt-1 font-mono text-2xl font-bold">
+                ${m.price >= 1000
+                  ? m.price.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                  : m.price >= 1
+                    ? m.price.toFixed(2)
+                    : m.price.toFixed(4)}
+              </p>
+
+              {/* Momentum bar — the key visualization */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-[10px] text-muted">
+                  <span className="text-danger">Sellers</span>
+                  <span className="font-mono font-bold">
+                    {m.momentum.toFixed(0)}%
+                  </span>
+                  <span className="text-success">Buyers</span>
+                </div>
+                <div className="mt-1 h-3 overflow-hidden rounded-full bg-card-hover">
+                  {/* Red base (full width) */}
+                  <div className="relative h-full w-full bg-danger/20">
+                    {/* Green fill from left (represents buy momentum) */}
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out"
+                      style={{
+                        width: `${m.momentum}%`,
+                        background: m.momentum > 55
+                          ? "linear-gradient(90deg, rgba(34,197,94,0.3), rgba(34,197,94,0.7))"
+                          : m.momentum < 45
+                            ? "linear-gradient(90deg, rgba(239,68,68,0.3), rgba(239,68,68,0.5))"
+                            : "linear-gradient(90deg, rgba(234,179,8,0.3), rgba(234,179,8,0.5))",
+                      }}
+                    />
+                    {/* Center marker */}
+                    <div className="absolute inset-y-0 left-1/2 w-px bg-muted/30" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="mt-2 flex items-center justify-between text-[10px] text-muted">
+                <span>{m.trades} trades tracked</span>
+                <span className="flex items-center gap-1">
+                  <span className={`h-1.5 w-1.5 rounded-full ${isFlashing ? (m.lastSide === "buy" ? "bg-success" : "bg-danger") : "bg-muted/30"}`} />
+                  {isFlashing ? (m.lastSide === "buy" ? "Buy" : "Sell") : "Waiting..."}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Data source */}
       <div className="flex items-center gap-2 text-[10px] text-muted">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" />
-        Prices from Pacifica REST API (10s refresh) | Trade flow from Pacifica WebSocket (real-time)
+        Initial prices from Pacifica /trades API | Live momentum from WebSocket trade stream | Bar uses exponential moving average (doesn&apos;t reset)
       </div>
     </div>
   );
