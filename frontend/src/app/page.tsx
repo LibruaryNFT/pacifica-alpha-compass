@@ -328,6 +328,10 @@ export default function Dashboard() {
             <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
             Alpha Score Engine — 5-signal composite
           </span>
+          <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2.5 py-1 text-cyan-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+            Privy — Solana wallet auth + portfolio
+          </span>
         </div>
       </div>
 

@@ -1,15 +1,26 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Wallet } from "lucide-react";
 
 /**
- * Simple wallet button that navigates to the Portfolio page
- * where the full Privy provider lives. This avoids wrapping
- * the entire app in PrivyProvider (which crashes if SDK fails to init).
+ * Wallet button shown in the header.
+ * On non-portfolio pages: navigates to /portfolio to connect.
+ * On /portfolio page: Privy handles wallet display directly in the page.
  */
 export default function WalletButton() {
   const router = useRouter();
+  const pathname = usePathname();
+
+  // On portfolio page, the page itself handles wallet state via Privy
+  if (pathname === "/portfolio") {
+    return (
+      <span className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary">
+        <Wallet className="h-3.5 w-3.5" />
+        Wallet Connected
+      </span>
+    );
+  }
 
   return (
     <button

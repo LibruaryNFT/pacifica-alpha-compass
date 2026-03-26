@@ -241,16 +241,48 @@ export default function AlphaScorePage() {
                   </>
                 );
               })()}
-              {/* Execute on Pacifica */}
-              <a
-                href={`https://test-app.pacifica.fi/trade/${data.symbol.replace("-USDC", "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-medium text-background transition-colors hover:bg-primary/80"
-              >
-                Trade {data.symbol.replace("-USDC", "")} on Pacifica
-                <ArrowUpRight className="h-4 w-4" />
-              </a>
+              {/* Execute on Pacifica + Paper Trade */}
+              <div className="mt-4 flex gap-2">
+                <a
+                  href={`https://test-app.pacifica.fi/trade/${data.symbol.replace("-USDC", "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-medium text-background transition-colors hover:bg-primary/80"
+                >
+                  Trade on Pacifica
+                  <ArrowUpRight className="h-4 w-4" />
+                </a>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/orders", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          symbol: data.symbol,
+                          side: data.trade_suggestion.action === "short" ? "short" : "long",
+                          size: 1,
+                          entry_price: parseFloat(String(data.trade_suggestion.entry_zone).replace(/[$,\s-]/g, "")) || 0,
+                          target_price: parseFloat(String(data.trade_suggestion.target).replace(/[$,\s]/g, "")) || 0,
+                          stop_price: parseFloat(String(data.trade_suggestion.stop_loss).replace(/[$,\s]/g, "")) || 0,
+                          alpha_score: data.alpha_score,
+                          direction: data.direction,
+                          risk_reward: data.trade_suggestion.risk_reward,
+                        }),
+                      });
+                      if (res.ok) {
+                        alert(`Paper trade created: ${data.trade_suggestion.action.toUpperCase()} ${data.symbol}`);
+                      }
+                    } catch {
+                      // Failed silently
+                    }
+                  }}
+                  disabled={data.trade_suggestion.action === "wait" || data.trade_suggestion.action === "reduce"}
+                  className="flex items-center gap-1.5 rounded-lg border border-primary/30 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Paper Trade
+                </button>
+              </div>
             </div>
 
             {/* Liquidation risk */}
