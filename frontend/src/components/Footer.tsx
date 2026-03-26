@@ -52,6 +52,10 @@ export default function Footer() {
             <span>Pacifica Hackathon 2026</span>
           </div>
         </div>
+        <div className="mt-4 border-t border-border pt-3 text-center text-[10px] text-muted/60">
+          Not financial advice. Alpha Compass is experimental software for educational and research purposes only.
+          Trading perpetual futures involves substantial risk of loss. Past performance does not guarantee future results.
+        </div>
       </div>
     </footer>
   );

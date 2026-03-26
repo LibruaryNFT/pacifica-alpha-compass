@@ -80,13 +80,27 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://alpha-compass.vercel.app,http://localhost:3000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+import re
+
+VALID_SYMBOL = re.compile(r"^[A-Z]{2,10}(-USDC)?$")
+
+
+def validate_symbol(symbol: str) -> str:
+    """Validate and normalize market symbol."""
+    s = symbol.upper().strip()
+    if not VALID_SYMBOL.match(s):
+        raise HTTPException(status_code=400, detail=f"Invalid symbol: {symbol}")
+    return s
 
 
 # --- Health ---
@@ -268,7 +282,9 @@ from fastapi import Header
 
 def verify_api_key(x_internal_key: str = Header(default="")):
     """Verify internal API key for expensive endpoints."""
-    if INTERNAL_API_KEY and x_internal_key != INTERNAL_API_KEY:
+    if not INTERNAL_API_KEY:
+        raise HTTPException(status_code=503, detail="API key not configured")
+    if x_internal_key != INTERNAL_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
