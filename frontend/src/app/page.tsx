@@ -12,6 +12,8 @@ import {
   Target,
   Shield,
   ArrowRight,
+  MessageCircle,
+  FlaskConical,
 } from "lucide-react";
 import PriceCard from "@/components/PriceCard";
 import Tooltip from "@/components/Tooltip";
@@ -56,6 +58,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [alphaScores, setAlphaScores] = useState<Record<string, AlphaScoreData>>({});
   const [alphaLoading, setAlphaLoading] = useState(false);
+  const [trending, setTrending] = useState<{ token: string; mentionCount: number; smartEngagement: number }[]>([]);
+  const [accuracy, setAccuracy] = useState<{ accuracy: number; total_signals: number; total_pnl_pct: number } | null>(null);
 
   // WebSocket for connection status only — REST polling handles actual prices
   // (WS trade prices can differ significantly from mark prices)
@@ -86,6 +90,24 @@ export default function Dashboard() {
       // Precomputed endpoint unavailable — scores will show empty state
     }
     setAlphaLoading(false);
+
+    // Load Elfa AI trending tokens
+    try {
+      const tRes = await fetch("/api/social/trending");
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        if (Array.isArray(tData)) setTrending(tData.slice(0, 6));
+      }
+    } catch { /* Elfa unavailable */ }
+
+    // Load live accuracy
+    try {
+      const aRes = await fetch("/api/accuracy");
+      if (aRes.ok) {
+        const aData = await aRes.json();
+        if (aData?.aggregate) setAccuracy(aData.aggregate);
+      }
+    } catch { /* Accuracy unavailable */ }
   }, []);
 
   useEffect(() => {
@@ -225,6 +247,61 @@ export default function Dashboard() {
           <p className="mt-1 font-mono text-lg font-bold text-accent">3</p>
           <p className="text-[10px] text-muted">Claude + GPT-4o + Llama-3 debate every market</p>
         </div>
+      </div>
+
+      {/* Live Accuracy badge + Social Buzz (Elfa AI) */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Live Accuracy */}
+        {accuracy && accuracy.total_signals > 0 && (
+          <button
+            onClick={() => router.push("/accuracy")}
+            className="rounded-lg border border-success/20 bg-success/5 p-4 text-left transition-colors hover:border-success/40"
+          >
+            <div className="flex items-center gap-2">
+              <FlaskConical className="h-4 w-4 text-success" />
+              <span className="text-xs font-medium text-success">Live Accuracy — Real Pacifica Data</span>
+            </div>
+            <div className="mt-2 flex items-baseline gap-4">
+              <div>
+                <span className={`font-mono text-3xl font-black ${accuracy.accuracy >= 55 ? "text-success" : accuracy.accuracy >= 45 ? "text-warning" : "text-danger"}`}>
+                  {accuracy.accuracy}%
+                </span>
+                <span className="ml-1 text-xs text-muted">accuracy</span>
+              </div>
+              <div>
+                <span className="font-mono text-lg font-bold">{accuracy.total_signals}</span>
+                <span className="ml-1 text-xs text-muted">signals</span>
+              </div>
+              <div>
+                <span className={`font-mono text-lg font-bold ${accuracy.total_pnl_pct >= 0 ? "text-success" : "text-danger"}`}>
+                  {accuracy.total_pnl_pct >= 0 ? "+" : ""}{accuracy.total_pnl_pct}%
+                </span>
+                <span className="ml-1 text-xs text-muted">P&L</span>
+              </div>
+            </div>
+          </button>
+        )}
+
+        {/* Elfa AI Social Buzz */}
+        {trending.length > 0 && (
+          <div className="rounded-lg border border-purple-400/20 bg-purple-400/5 p-4">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="h-4 w-4 text-purple-400" />
+              <span className="text-xs font-medium text-purple-400">Social Buzz — Powered by Elfa AI</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {trending.map((t) => (
+                <span
+                  key={t.token}
+                  className="flex items-center gap-1.5 rounded-full bg-purple-400/10 px-2.5 py-1 text-xs"
+                >
+                  <span className="font-bold text-purple-300">${t.token}</span>
+                  <span className="text-purple-400/60">{(t.mentionCount / 1000).toFixed(0)}K mentions</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Data sources — show judges where everything comes from */}
