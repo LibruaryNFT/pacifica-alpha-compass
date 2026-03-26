@@ -123,13 +123,16 @@ export default function PortfolioPage() {
       if (ordRes.ok) {
         const ordData = await ordRes.json();
         if (ordData?.success && Array.isArray(ordData.data)) {
-          setOrders(ordData.data.map((o: Record<string, unknown>) => ({
-            symbol: String(o.symbol || o.market || ""),
-            side: String(o.side || ""),
-            size: Number(o.size || o.amount || 0),
-            price: Number(o.price || 0),
-            order_type: String(o.order_type || o.type || "limit"),
-          })));
+          setOrders(ordData.data.map((o: Record<string, unknown>) => {
+            const rawSide = String(o.side || "");
+            return {
+              symbol: String(o.symbol || ""),
+              side: rawSide === "bid" ? "BUY" : rawSide === "ask" ? "SELL" : rawSide.toUpperCase(),
+              size: Number(o.initial_amount || o.amount || o.size || 0),
+              price: Number(o.price || 0),
+              order_type: String(o.order_type || o.type || "limit"),
+            };
+          }));
         }
       }
     } catch { /* unavailable */ }
@@ -316,7 +319,7 @@ export default function PortfolioPage() {
                   <div className="flex items-center gap-3">
                     <span className="text-lg font-bold">{pos.symbol}</span>
                     <span className={`rounded px-2 py-0.5 text-xs font-bold ${pos.side.includes("long") ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
-                      {pos.side.toUpperCase()} {pos.leverage}x
+                      {pos.side.toUpperCase()} {pos.leverage > 0 ? `${pos.leverage}x` : "Cross"}
                     </span>
                   </div>
                   <span className={`font-mono text-lg font-bold ${pos.unrealized_pnl >= 0 ? "text-success" : "text-danger"}`}>
@@ -326,7 +329,7 @@ export default function PortfolioPage() {
                 <div className="mt-2 grid grid-cols-3 gap-3 text-xs text-muted">
                   <div>Size: <span className="font-mono text-foreground">{pos.size}</span></div>
                   <div>Entry: <span className="font-mono text-foreground">${pos.entry_price.toLocaleString()}</span></div>
-                  <div>Leverage: <span className="font-mono text-foreground">{pos.leverage}x</span></div>
+                  <div>Margin: <span className="font-mono text-foreground">{pos.leverage > 0 ? `${pos.leverage}x` : "Cross"}</span></div>
                 </div>
               </div>
             ))}
