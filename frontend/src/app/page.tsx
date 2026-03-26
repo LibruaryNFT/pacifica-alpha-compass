@@ -78,24 +78,23 @@ export default function Dashboard() {
     setLoading(false);
   }, []);
 
-  // Load Alpha Scores for top 4 markets
+  // Load Alpha Scores one by one so cards appear progressively
   const loadAlphaScores = useCallback(async () => {
     setAlphaLoading(true);
     const top4 = TOP_MARKETS.slice(0, 4);
-    const results = await Promise.allSettled(
-      top4.map(async (symbol) => {
+    for (const symbol of top4) {
+      try {
         const res = await fetch(`/api/alpha-score/${symbol}`);
-        if (!res.ok) return null;
-        return res.json();
-      })
-    );
-    const scores: Record<string, AlphaScoreData> = {};
-    results.forEach((r) => {
-      if (r.status === "fulfilled" && r.value) {
-        scores[r.value.symbol] = r.value;
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.symbol) {
+            setAlphaScores((prev) => ({ ...prev, [data.symbol]: data }));
+          }
+        }
+      } catch {
+        // Skip failed scores
       }
-    });
-    setAlphaScores(scores);
+    }
     setAlphaLoading(false);
   }, []);
 
