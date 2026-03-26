@@ -49,28 +49,14 @@ export default function PulsePage() {
   const [wsConnected, setWsConnected] = useState(false);
   const [tradeCounts, setTradeCounts] = useState<Record<string, { count: number; buys: number }>>({});
 
-  // Fetch prices + alpha scores
-  const loadData = useCallback(async () => {
+  const [alphaMap, setAlphaMap] = useState<Record<string, { score: number; direction: string }>>({});
+
+  // Load prices first (fast), then alpha scores in background
+  const loadPrices = useCallback(async () => {
     try {
       const priceRes = await fetch("https://api.pacifica.fi/api/v1/market-price");
       const prices = await priceRes.json();
       const priceList = Array.isArray(prices) ? prices : prices.data || [];
-
-      // Fetch alpha scores for all markets in parallel
-      const alphaResults = await Promise.allSettled(
-        SYMBOLS.map(async (sym) => {
-          const res = await fetch(`/api/alpha-score/${sym}-USDC`);
-          if (!res.ok) return null;
-          return res.json();
-        })
-      );
-
-      const alphaMap: Record<string, { score: number; direction: string }> = {};
-      alphaResults.forEach((r) => {
-        if (r.status === "fulfilled" && r.value) {
-          alphaMap[r.value.symbol] = { score: r.value.alpha_score, direction: r.value.direction };
-        }
-      });
 
       const heat: MarketHeat[] = priceList
         .filter((p: Record<string, unknown>) => SYMBOLS.includes(String(p.symbol).replace("-USDC", "")))
@@ -97,13 +83,32 @@ export default function PulsePage() {
       console.error("Heatmap load failed:", e);
       setLoading(false);
     }
-  }, [tradeCounts]);
+  }, [tradeCounts, alphaMap]);
+
+  // Load alpha scores in background (slow, cached)
+  const loadAlphaScores = useCallback(async () => {
+    const results = await Promise.allSettled(
+      SYMBOLS.slice(0, 4).map(async (sym) => {
+        const res = await fetch(`/api/alpha-score/${sym}-USDC`);
+        if (!res.ok) return null;
+        return res.json();
+      })
+    );
+    const map: Record<string, { score: number; direction: string }> = {};
+    results.forEach((r) => {
+      if (r.status === "fulfilled" && r.value) {
+        map[r.value.symbol] = { score: r.value.alpha_score, direction: r.value.direction };
+      }
+    });
+    setAlphaMap((prev) => ({ ...prev, ...map }));
+  }, []);
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 10000);
+    loadPrices();
+    loadAlphaScores();
+    const interval = setInterval(loadPrices, 10000);
     return () => clearInterval(interval);
-  }, [loadData]);
+  }, [loadPrices, loadAlphaScores]);
 
   // WebSocket for live trade counting
   useEffect(() => {
