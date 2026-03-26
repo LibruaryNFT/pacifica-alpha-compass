@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { PrivyProvider, usePrivy } from "@privy-io/react-auth";
 import {
   Wallet,
   TrendingUp,
@@ -11,6 +11,8 @@ import {
   LogIn,
   ExternalLink,
 } from "lucide-react";
+
+const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "cmn68tirx046b0ckye8rxc97h";
 
 interface AlphaScore {
   symbol: string;
@@ -38,6 +40,20 @@ interface WalletBalance {
 }
 
 export default function PortfolioPage() {
+  return (
+    <PrivyProvider
+      appId={PRIVY_APP_ID}
+      config={{
+        appearance: { theme: "dark", accentColor: "#22c55e", walletChainType: "ethereum-and-solana" },
+        loginMethods: ["wallet"],
+      }}
+    >
+      <PortfolioContent />
+    </PrivyProvider>
+  );
+}
+
+function PortfolioContent() {
   const { ready, authenticated, login, user } = usePrivy();
   const [alphaScores, setAlphaScores] = useState<Record<string, AlphaScore>>({});
   const [balance, setBalance] = useState<WalletBalance | null>(null);
