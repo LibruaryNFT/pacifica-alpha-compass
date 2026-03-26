@@ -151,7 +151,7 @@ export default function PulsePage() {
             Market Pulse
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Live momentum across all Pacifica markets — bar fills green for buying, red for selling
+            Live momentum across all Pacifica markets — volume-weighted buy/sell pressure from real trades
           </p>
         </div>
         <span className="flex items-center gap-1.5 text-xs text-muted">
@@ -201,14 +201,14 @@ export default function PulsePage() {
                     : m.price.toFixed(4)}
               </p>
 
-              {/* Momentum bar — the key visualization */}
+              {/* Momentum bar — volume-weighted buy/sell pressure */}
               <div className="mt-3">
                 <div className="flex items-center justify-between text-[10px] text-muted">
-                  <span className="text-danger">Sellers</span>
+                  <span className="text-danger">Sell pressure</span>
                   <span className="font-mono font-bold">
-                    {m.momentum.toFixed(0)}%
+                    {m.momentum > 55 ? "Strong Buy" : m.momentum < 45 ? "Strong Sell" : "Neutral"} ({m.momentum.toFixed(0)}%)
                   </span>
-                  <span className="text-success">Buyers</span>
+                  <span className="text-success">Buy pressure</span>
                 </div>
                 <div className="mt-1 h-3 overflow-hidden rounded-full bg-card-hover">
                   {/* Red base (full width) */}
@@ -230,6 +230,8 @@ export default function PulsePage() {
                   </div>
                 </div>
               </div>
+
+              <p className="mt-1 text-center text-[9px] text-muted/50">Vol-weighted EMA • updates live</p>
 
               {/* Volume + last trade */}
               <div className="mt-2 flex items-center justify-between text-[10px] text-muted">
