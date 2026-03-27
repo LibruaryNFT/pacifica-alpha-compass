@@ -318,22 +318,22 @@ export default function Dashboard() {
       <div className="rounded-lg border border-border/50 bg-card/50 p-3">
         <div className="flex flex-wrap gap-2 text-[10px]">
           <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-400">
-            Real candles from trade stream (Pacifica has no candle API)
+            Live price history built from real trades
           </span>
           <span className="rounded-full bg-purple-500/10 px-2.5 py-1 text-purple-400">
-            Elfa AI social sentiment
+            Social sentiment via Elfa AI
           </span>
           <span className="rounded-full bg-orange-500/10 px-2.5 py-1 text-orange-400">
-            3 LLMs debate each market
+            3 AI models debate every market
           </span>
           <span className="rounded-full bg-yellow-500/10 px-2.5 py-1 text-yellow-400">
-            5-signal Alpha Score, updated every 60s
+            Alpha Score updated every 60 seconds
           </span>
           <span className="rounded-full bg-success/10 px-2.5 py-1 text-success">
-            Real positions via Pacifica public API
+            Real portfolio from Pacifica&apos;s public API
           </span>
           <span className="rounded-full bg-accent/10 px-2.5 py-1 text-accent">
-            Persistent alerts + Discord webhooks
+            Alerts with Discord notifications
           </span>
         </div>
       </div>
