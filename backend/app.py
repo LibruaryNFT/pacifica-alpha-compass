@@ -829,6 +829,33 @@ async def backtest(symbol: str, _: None = Depends(verify_api_key)):
         raise HTTPException(status_code=500, detail=f"Backtest failed: {e}")
 
 
+# --- Pacifica Intelligence (exchange-specific, not available on other DEXs) ---
+
+
+@app.get("/api/pacifica/leaderboard")
+async def pacifica_leaderboard():
+    """Pacifica exchange intelligence — whale tracking, smart money, leaderboard analytics."""
+    from services.pacifica_intel import get_leaderboard_stats
+
+    return await get_leaderboard_stats()
+
+
+@app.get("/api/pacifica/smart-money")
+async def pacifica_smart_money():
+    """What are Pacifica's top 5 most profitable traders doing right now?"""
+    from services.pacifica_intel import get_smart_money_flow
+
+    return await get_smart_money_flow()
+
+
+@app.get("/api/pacifica/whale/{address}")
+async def pacifica_whale(address: str):
+    """Get a specific trader's positions + orders on Pacifica."""
+    from services.pacifica_intel import get_whale_positions
+
+    return await get_whale_positions(address)
+
+
 # --- Social Sentiment (Elfa AI) ---
 
 
