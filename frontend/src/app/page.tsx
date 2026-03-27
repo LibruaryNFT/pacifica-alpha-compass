@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Compass,
   Brain,
   TrendingUp,
   TrendingDown,
@@ -124,11 +123,7 @@ export default function Dashboard() {
       {/* Hero */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">
-            <Compass className="mr-2 inline h-6 w-6 text-primary" />
-            Alpha Compass
-          </h1>
-          <p className="mt-1 text-sm text-muted">
+          <p className="text-sm text-muted">
             The missing analytics layer for Pacifica DEX — real candles, AI signals, live positions
           </p>
           <div className="mt-2 flex items-center gap-3">
@@ -319,42 +314,29 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Why Alpha Compass Works — narrative grid for judges */}
-      <section className="rounded-lg border border-border/50 bg-card/50 p-4">
-        <p className="mb-3 text-xs font-medium text-muted">Why Alpha Compass Works</p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs">
-          <div className="rounded-lg border border-blue-400/20 bg-blue-400/5 p-3">
-            <p className="font-semibold text-blue-400">Pacifica Trade Stream</p>
-            <p className="mt-1 text-muted">Pacifica has no candle API. We built one — WebSocket + REST trades → OHLCV candles in SQLite. Real data, not aggregators.</p>
-            <p className="mt-2 text-[10px] font-mono text-blue-300">+ {prices.length} markets • real-time</p>
-          </div>
-          <div className="rounded-lg border border-purple-400/20 bg-purple-400/5 p-3">
-            <p className="font-semibold text-purple-400">Elfa AI Social Sentiment</p>
-            <p className="mt-1 text-muted">Twitter + Telegram social signals catch emerging hype before price moves. Trending tokens tracked continuously.</p>
-            <p className="mt-2 text-[10px] font-mono text-purple-300">+ {trending.length > 0 ? `${trending.length} tokens tracked` : "Live sentiment"}</p>
-          </div>
-          <div className="rounded-lg border border-orange-400/20 bg-orange-400/5 p-3">
-            <p className="font-semibold text-orange-400">3-Model AI Consensus</p>
-            <p className="mt-1 text-muted">Claude analyzes risk, GPT-4o reads sentiment, Llama-3 does technicals. Triangulation beats any single model.</p>
-            <p className="mt-2 text-[10px] font-mono text-orange-300">+ 24h cache • $0.40/day max</p>
-          </div>
-          <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-3">
-            <p className="font-semibold text-yellow-400">5-Signal Alpha Score</p>
-            <p className="mt-1 text-muted">Momentum + volatility + funding + volume + orderbook depth. One number, updated every 60 seconds.</p>
-            <p className="mt-2 text-[10px] font-mono text-yellow-300">+ Precomputed • instant load</p>
-          </div>
-          <div className="rounded-lg border border-success/20 bg-success/5 p-3">
-            <p className="font-semibold text-success">Real Portfolio Lookup</p>
-            <p className="mt-1 text-muted">Paste any Solana address — see real Pacifica positions + orders. No auth, no signing. Public API discovery.</p>
-            <p className="mt-2 text-[10px] font-mono text-success">+ 8,124 traders on leaderboard</p>
-          </div>
-          <div className="rounded-lg border border-accent/20 bg-accent/5 p-3">
-            <p className="font-semibold text-accent">Persistent Alerts + Discord</p>
-            <p className="mt-1 text-muted">Set threshold alerts on Alpha Scores. Survive restarts (SQLite). Discord webhook notifications when triggered.</p>
-            <p className="mt-2 text-[10px] font-mono text-accent">+ SQLite + Discord webhooks</p>
-          </div>
+      {/* How it works — tight, no fluff */}
+      <div className="rounded-lg border border-border/50 bg-card/50 p-3">
+        <div className="flex flex-wrap gap-2 text-[10px]">
+          <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-400">
+            Real candles from trade stream (Pacifica has no candle API)
+          </span>
+          <span className="rounded-full bg-purple-500/10 px-2.5 py-1 text-purple-400">
+            Elfa AI social sentiment
+          </span>
+          <span className="rounded-full bg-orange-500/10 px-2.5 py-1 text-orange-400">
+            3 LLMs debate each market
+          </span>
+          <span className="rounded-full bg-yellow-500/10 px-2.5 py-1 text-yellow-400">
+            5-signal Alpha Score, updated every 60s
+          </span>
+          <span className="rounded-full bg-success/10 px-2.5 py-1 text-success">
+            Real positions via Pacifica public API
+          </span>
+          <span className="rounded-full bg-accent/10 px-2.5 py-1 text-accent">
+            Persistent alerts + Discord webhooks
+          </span>
         </div>
-      </section>
+      </div>
 
       {/* Markets grid */}
       <section>
