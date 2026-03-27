@@ -8,8 +8,6 @@ import {
   BarChart3,
   Wallet,
   Brain,
-  Fish,
-  ArrowRightLeft,
   Zap,
   Bell,
   FlaskConical,
@@ -20,19 +18,17 @@ import dynamic from "next/dynamic";
 
 const PRIMARY_NAV = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
-  { href: "/pulse", label: "Live Trades", icon: BarChart3 },
   { href: "/alpha", label: "Alpha Score", icon: Zap },
   { href: "/smart-money", label: "Smart Money", icon: Zap },
   { href: "/ai", label: "AI Consensus", icon: Brain },
-  { href: "/alerts", label: "Alerts", icon: Bell },
 ];
 
 const SECONDARY_NAV = [
+  { href: "/pulse", label: "Live Trades", icon: BarChart3 },
   { href: "/portfolio", label: "Portfolio", icon: Wallet },
+  { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/accuracy", label: "Live Accuracy", icon: FlaskConical },
   { href: "/backtest", label: "Backtest", icon: Compass },
-  { href: "/whales", label: "Whales", icon: Fish },
-  { href: "/bridge", label: "Bridge", icon: ArrowRightLeft },
 ];
 
 const WalletButton = dynamic(() => import("./WalletButton"), {
