@@ -1,8 +1,11 @@
 "use client";
 
-import { ArrowRightLeft, ExternalLink, Info } from "lucide-react";
+import { useState } from "react";
+import { ArrowRightLeft, ExternalLink, Info, AlertTriangle } from "lucide-react";
 
 export default function BridgePage() {
+  const [iframeError, setIframeError] = useState(false);
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
       <div>
@@ -41,12 +44,31 @@ export default function BridgePage() {
       {/* Rhino.fi widget */}
       <div className="flex justify-center">
         <div className="w-full max-w-[420px] overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-          <iframe
-            src="https://app.rhino.fi/bridge?token=USDC&chainOut=SOLANA&theme=dark"
-            style={{ width: "100%", height: "600px", border: "none" }}
-            title="Rhino.fi Bridge"
-            allow="clipboard-write"
-          />
+          {iframeError ? (
+            <div className="flex flex-col items-center justify-center gap-4 p-12 text-center" style={{ height: "600px" }}>
+              <AlertTriangle className="h-10 w-10 text-warning" />
+              <div>
+                <p className="font-medium">Bridge widget unavailable</p>
+                <p className="mt-1 text-sm text-muted">Rhino.fi doesn&apos;t allow embedding in all browsers.</p>
+              </div>
+              <a
+                href="https://app.rhino.fi/bridge?token=USDC&chainOut=SOLANA"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-background"
+              >
+                Open Rhino.fi <ExternalLink className="h-4 w-4" />
+              </a>
+            </div>
+          ) : (
+            <iframe
+              src="https://app.rhino.fi/bridge?token=USDC&chainOut=SOLANA&theme=dark"
+              style={{ width: "100%", height: "600px", border: "none" }}
+              title="Rhino.fi Bridge"
+              allow="clipboard-write"
+              onError={() => setIframeError(true)}
+            />
+          )}
         </div>
       </div>
 

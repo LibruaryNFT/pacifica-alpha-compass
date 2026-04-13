@@ -73,10 +73,7 @@ export default function ReferralsPage() {
           Referral Program
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Invite friends to Alpha Compass. Earn rewards when they trade on Pacifica — powered by{" "}
-          <a href="https://fuul.xyz" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-            Fuul
-          </a>
+          Share Alpha Compass with your trading community. Your referral link is tracked via Builder Code — every trade your referrals make contributes to your volume stats.
         </p>
       </div>
 
@@ -155,8 +152,8 @@ export default function ReferralsPage() {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
           {[
             { n: 1, color: "primary", title: "Share Your Link", desc: "Send your unique referral link to friends and community" },
-            { n: 2, color: "accent", title: "They Trade on Pacifica", desc: "When your referrals trade using Alpha Compass, volume is tracked via Builder Code" },
-            { n: 3, color: "success", title: "Earn Rewards", desc: "Receive a share of trading fees. Rewards are distributed automatically via Fuul" },
+            { n: 2, color: "accent", title: "They Trade on Pacifica", desc: "When your referrals trade using Alpha Compass, their volume is tracked via Pacifica Builder Code" },
+            { n: 3, color: "success", title: "Earn Rewards", desc: "Receive a share of trading fees — distributed by Pacifica's referral program to Builder Code holders" },
           ].map((step) => (
             <div key={step.n} className="text-center">
               <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-${step.color}/10 text-2xl font-bold text-${step.color}`}>
@@ -172,32 +169,11 @@ export default function ReferralsPage() {
       {/* Leaderboard */}
       <div className="rounded-lg border border-border bg-card p-6">
         <h2 className="mb-4 text-lg font-semibold">Referral Leaderboard</h2>
-        <div className="space-y-2">
-          {[
-            { rank: 1, address: "7xKn...8fPq", referrals: 24, volume: "$142,300" },
-            { rank: 2, address: "3mWz...rT9v", referrals: 18, volume: "$98,750" },
-            { rank: 3, address: "9pLx...kN2s", referrals: 12, volume: "$67,200" },
-            { rank: 4, address: "5dRy...vJ4m", referrals: 8, volume: "$34,100" },
-            { rank: 5, address: "2cFh...wQ7b", referrals: 5, volume: "$21,500" },
-          ].map((entry) => (
-            <div key={entry.rank} className="flex items-center justify-between rounded-lg border border-border/50 bg-background/50 p-3 text-sm">
-              <div className="flex items-center gap-3">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                  entry.rank === 1 ? "bg-yellow-500/20 text-yellow-500"
-                  : entry.rank === 2 ? "bg-gray-400/20 text-gray-400"
-                  : entry.rank === 3 ? "bg-amber-600/20 text-amber-600"
-                  : "bg-card text-muted"
-                }`}>{entry.rank}</span>
-                <span className="font-mono">{entry.address}</span>
-              </div>
-              <div className="flex items-center gap-6">
-                <span className="text-muted">{entry.referrals} referrals</span>
-                <span className="font-mono font-medium text-primary">{entry.volume}</span>
-              </div>
-            </div>
-          ))}
+        <div className="flex flex-col items-center justify-center gap-3 py-8 text-center text-muted">
+          <Users className="h-10 w-10 opacity-30" />
+          <p className="text-sm">Leaderboard goes live when referral tracking is active.</p>
+          <p className="text-xs opacity-60">Share your link now — volume accumulates from day one.</p>
         </div>
-        <p className="mt-3 text-center text-xs text-muted">Demo data — live leaderboard powered by Fuul protocol</p>
       </div>
     </div>
   );

@@ -59,6 +59,7 @@ export default function Dashboard() {
   const [alphaLoading, setAlphaLoading] = useState(false);
   const [trending, setTrending] = useState<{ token: string; mentionCount: number; smartEngagement: number }[]>([]);
   const [accuracy, setAccuracy] = useState<{ accuracy: number; total_signals: number; total_pnl_pct: number; markets_collecting: number; markets_with_data: number } | null>(null);
+  const [exchangeStats, setExchangeStats] = useState<{ total_traders: number; profit_rate: number; total_open_interest_usd: number } | null>(null);
 
   // WebSocket for connection status only — REST polling handles actual prices
   // (WS trade prices can differ significantly from mark prices)
@@ -115,6 +116,22 @@ export default function Dashboard() {
         }
       }
     } catch { /* Accuracy unavailable */ }
+
+    // Load exchange stats from leaderboard API
+    try {
+      const lRes = await fetch("/api/pacifica/leaderboard");
+      if (lRes.ok) {
+        const lData = await lRes.json();
+        const s = lData?.exchange_stats;
+        if (s?.total_traders) {
+          setExchangeStats({
+            total_traders: s.total_traders,
+            profit_rate: s.profit_rate ?? 0,
+            total_open_interest_usd: s.total_open_interest_usd ?? 0,
+          });
+        }
+      }
+    } catch { /* Leaderboard unavailable */ }
   }, []);
 
   useEffect(() => {
@@ -238,17 +255,23 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-border bg-card p-3">
           <p className="text-xs text-muted">Pacifica Traders</p>
-          <p className="mt-1 font-mono text-lg font-bold">8,121</p>
-          <p className="text-[10px] text-muted">Only 21% profitable</p>
+          <p className="mt-1 font-mono text-lg font-bold">
+            {exchangeStats ? exchangeStats.total_traders.toLocaleString() : "—"}
+          </p>
+          <p className="text-[10px] text-muted">
+            {exchangeStats ? `${(exchangeStats.profit_rate * 100).toFixed(0)}% profitable` : "Live from leaderboard API"}
+          </p>
         </div>
         <div className="rounded-lg border border-border bg-card p-3">
           <p className="text-xs text-muted">Open Interest</p>
-          <p className="mt-1 font-mono text-lg font-bold">$52.4M</p>
+          <p className="mt-1 font-mono text-lg font-bold">
+            {exchangeStats ? `$${(exchangeStats.total_open_interest_usd / 1e6).toFixed(1)}M` : "—"}
+          </p>
           <p className="text-[10px] text-muted">Live from leaderboard API</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-3">
           <p className="text-xs text-muted">Markets Analyzed</p>
-          <p className="mt-1 font-mono text-lg font-bold">{prices.length}</p>
+          <p className="mt-1 font-mono text-lg font-bold">{prices.length || "—"}</p>
           <p className="text-[10px] text-muted">Real-time trades + WebSocket</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-3">
