@@ -84,8 +84,9 @@ function AIConsensusContent() {
           AI Consensus Engine
         </h1>
         <p className="mt-1 text-sm text-muted">
-          3 AI models debate market conditions — Claude (Risk), GPT-4o
-          (Sentiment), Llama-3 (Technical)
+          3 AI models independently analyze Pacifica market data — Llama-4 Scout (Risk), GPT-4o
+          (Market), Llama-3.3 70B (Technical).{" "}
+          <a href="/methodology" className="text-primary hover:underline">How it works &rarr;</a>
         </p>
       </div>
 
@@ -116,7 +117,7 @@ function AIConsensusContent() {
               Analyzing {selectedMarket}...
             </p>
             <p className="text-xs text-muted">
-              Running 3 AI models in parallel (Claude + GPT-4o + Llama-3)
+              Running 3 AI models in parallel (Llama-4 Scout + GPT-4o + Llama-3.3 70B)
             </p>
           </div>
         </div>

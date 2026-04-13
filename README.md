@@ -93,12 +93,27 @@ npm run dev
 
 Required env vars: `BACKEND_URL`, `INTERNAL_API_KEY`
 
+## Roadmap
+
+- **Builder Code integration** — route trade execution through Pacifica Builder Code for fee capture and sustainable revenue
+- **On-chain signal logging** — publish Alpha Score predictions on-chain for verifiable, tamper-proof accuracy tracking
+- **Expanded market coverage** — scale from 8 to all 59 Pacifica perpetual pairs
+
 ## Security
 
 - All LLM API keys are server-side only (never exposed to browser)
 - Backend endpoints protected with internal API key header (`x-internal-key`)
 - AI results cached (60 seconds) to minimize API costs and latency
 - No secrets in source code — all via environment variables
+
+## Acknowledgments
+
+- [Pacifica DEX](https://pacifica.fi) — REST, WebSocket, and Leaderboard APIs
+- [Groq](https://groq.com) — Llama-4 Scout and Llama-3.3 70B inference
+- [OpenAI](https://openai.com) — GPT-4o inference
+- [Recharts](https://recharts.org) — Chart visualizations
+- [Tailwind CSS](https://tailwindcss.com) — UI styling
+- [Vercel](https://vercel.com) — Frontend hosting
 
 ## Team
 

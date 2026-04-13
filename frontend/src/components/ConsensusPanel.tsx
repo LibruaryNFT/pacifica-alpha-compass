@@ -15,10 +15,10 @@ const DIRECTION_CONFIG = {
   neutral: { color: "text-warning", bg: "bg-warning/10", border: "border-warning/30", label: "NEUTRAL", emoji: "~" },
 };
 
-const MODEL_CONFIG: Record<string, { icon: string; name: string; role: string; color: string; bgColor: string }> = {
-  claude: { icon: "C", name: "Claude", role: "Risk Analyst", color: "text-orange-400", bgColor: "bg-orange-400/20" },
-  gpt4o: { icon: "G", name: "GPT-4o", role: "Sentiment Analyst", color: "text-blue-400", bgColor: "bg-blue-400/20" },
-  llama3: { icon: "L", name: "Llama-3", role: "Technical Analyst", color: "text-purple-400", bgColor: "bg-purple-400/20" },
+const MODEL_CONFIG: Record<string, { icon: string; name: string; role: string; color: string; bgColor: string; dataFeed: string }> = {
+  claude: { icon: "L4", name: "Llama-4 Scout", role: "Risk Analyst", color: "text-orange-400", bgColor: "bg-orange-400/20", dataFeed: "Pacifica funding rates, liquidation clusters, open interest shifts" },
+  gpt4o: { icon: "G", name: "GPT-4o", role: "Market Analyst", color: "text-blue-400", bgColor: "bg-blue-400/20", dataFeed: "Pacifica OHLCV candles, volume profile, orderbook support/resistance" },
+  llama3: { icon: "L3", name: "Llama-3.3 70B", role: "Technical Analyst", color: "text-purple-400", bgColor: "bg-purple-400/20", dataFeed: "Multi-timeframe EMA crossovers, rate-of-change, orderbook imbalance" },
 };
 
 function TypingText({ text, speed = 15 }: { text: string; speed?: number }) {
@@ -96,6 +96,13 @@ function ModelCard({ analysis, index }: { analysis: AIAnalysis; index: number })
             {(analysis.confidence * 100).toFixed(0)}% confident
           </p>
         </div>
+      </div>
+
+      {/* Data feed label */}
+      <div className="mt-2 rounded bg-background/30 px-2.5 py-1">
+        <p className="font-mono text-[10px] text-muted/70">
+          Analyzing: {model.dataFeed}
+        </p>
       </div>
 
       {/* Reasoning with typing effect */}
