@@ -102,8 +102,8 @@ def run_backtest(
             volume_24h=float(current_candle.get("volume", current_candle.get("v", 0))),
         )
 
-        # Only trade on strong signals (score > 60 or < 40)
-        if 40 <= alpha.alpha_score <= 60:
+        # Only trade on directional signals (score > 55 or < 45)
+        if 45 <= alpha.alpha_score <= 55:
             continue
 
         # Check future price
