@@ -1,35 +1,40 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
 import { Gift, Copy, Check, Users, TrendingUp, Award } from "lucide-react";
 import { useState, useEffect } from "react";
 
 export default function ReferralsPage() {
-  const { authenticated, user } = usePrivy();
+  const [address, setAddress] = useState<string | null>(null);
+  const [addressInput, setAddressInput] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const wallet = user?.linkedAccounts?.find((a) => a.type === "wallet");
-  const address =
-    wallet && "address" in wallet
-      ? (wallet as { address: string }).address
-      : null;
+  const authenticated = !!address;
   const refCode = address ? address.slice(0, 8) : "connect-wallet";
   const referralUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}?ref=${refCode}`
       : "";
 
-  // Track pageview for Fuul attribution
+  // Track pageview for Fuul attribution and load saved address
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const ref = params.get("ref");
       if (ref) {
-        // Store referral code for attribution
         localStorage.setItem("fuul_ref", ref);
       }
+      // Restore saved wallet address
+      const saved = localStorage.getItem("wallet_address");
+      if (saved) setAddress(saved);
     }
   }, []);
+
+  const connectWallet = () => {
+    const addr = addressInput.trim();
+    if (addr.length < 32 || addr.length > 44) return;
+    setAddress(addr);
+    localStorage.setItem("wallet_address", addr);
+  };
 
   const copyLink = () => {
     navigator.clipboard.writeText(referralUrl);
@@ -123,10 +128,25 @@ export default function ReferralsPage() {
             </button>
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-border bg-background/50 p-8 text-center">
-            <p className="text-sm text-muted">
-              Connect your wallet to get your referral link
-            </p>
+          <div className="space-y-3">
+            <p className="text-sm text-muted">Enter your Solana wallet address to generate your referral link</p>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                placeholder="Solana wallet address (32–44 chars)"
+                value={addressInput}
+                onChange={(e) => setAddressInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && connectWallet()}
+                className="flex-1 rounded-lg border border-border bg-background px-4 py-2.5 font-mono text-sm text-foreground placeholder:text-muted"
+              />
+              <button
+                onClick={connectWallet}
+                disabled={addressInput.length < 32}
+                className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-background transition-colors hover:bg-primary/80 disabled:opacity-40"
+              >
+                Get Link
+              </button>
+            </div>
           </div>
         )}
       </div>

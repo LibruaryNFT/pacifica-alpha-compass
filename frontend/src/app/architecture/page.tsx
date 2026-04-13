@@ -5,10 +5,9 @@ import { Server, Shield, DollarSign, Layers } from "lucide-react";
 const COST_BREAKDOWN = [
   { service: "Vercel (Frontend)", cost: "$0/mo", note: "Free tier, static + serverless" },
   { service: "Hetzner VPS (Backend)", cost: "$5/mo", note: "Shared with other services" },
-  { service: "Claude API (Risk)", cost: "~$0.03/call", note: "Cached 1hr, ~$2/day max" },
-  { service: "GPT-4o API (Sentiment)", cost: "~$0.03/call", note: "Cached 1hr, ~$2/day max" },
-  { service: "Llama-3 via Groq (Technical)", cost: "$0/call", note: "Free tier" },
-  { service: "Elfa AI (Social)", cost: "$0/call", note: "Free tier, 60 req/min" },
+  { service: "Llama-4-Scout via Groq (Risk)", cost: "$0/call", note: "Free tier, fastest inference" },
+  { service: "GPT-4o API (Sentiment)", cost: "~$0.03/call", note: "Cached 24hr, ~$0.40/day max" },
+  { service: "Llama-3.3-70b via Groq (Technical)", cost: "$0/call", note: "Free tier" },
   { service: "Pacifica API (Market Data)", cost: "$0", note: "Public endpoints, no auth" },
 ];
 
@@ -18,9 +17,9 @@ const ARCH_LAYERS = [
     color: "text-blue-400",
     bg: "bg-blue-400/10",
     items: [
-      "Pacifica REST API — prices, candles, orderbook, funding rates (5s polling)",
+      "Pacifica REST API — prices, orderbook, funding rates (5s polling)",
       "Pacifica WebSocket — real-time trade stream (connection indicator)",
-      "Elfa AI API — social mentions, trending tokens, sentiment scores",
+      "Trade stream → SQLite candle pipeline — 540K+ trades → OHLCV buckets (1m/5m/1h)",
     ],
   },
   {
@@ -39,9 +38,9 @@ const ARCH_LAYERS = [
     color: "text-purple-400",
     bg: "bg-purple-400/10",
     items: [
-      "Claude (Risk Analyst) — receives Alpha Score signals, evaluates downside",
+      "Llama-4-Scout via Groq (Risk Analyst) — evaluates liquidation risk + leverage danger",
       "GPT-4o (Sentiment Analyst) — receives funding predictions, reads crowd positioning",
-      "Llama-3 (Technical Analyst) — receives trade suggestions, validates with TA",
+      "Llama-3.3-70b via Groq (Technical Analyst) — receives trade suggestions, validates with TA",
       "Consensus Engine — weighted vote aggregation, regime detection, alert generation",
     ],
   },
@@ -50,8 +49,8 @@ const ARCH_LAYERS = [
     color: "text-green-400",
     bg: "bg-green-400/10",
     items: [
-      "Next.js 14 + Tailwind CSS — 11 pages, server-side API proxy",
-      "Privy — Solana wallet connection (Phantom, Solflare, MetaMask)",
+      "Next.js 14 + Tailwind CSS — 13 pages, server-side API proxy for key protection",
+      "Direct wallet address input — no signing required, reads public Pacifica API",
       "Rhino.fi — cross-chain USDC bridge widget (7+ chains to Solana)",
       "Fuul — referral tracking with attribution and leaderboard",
     ],
@@ -100,11 +99,11 @@ export default function ArchitecturePage() {
             </p>
           </div>
           <div>
-            <h3 className="text-sm font-medium">Wallet Integration</h3>
+            <h3 className="text-sm font-medium">Portfolio Lookup</h3>
             <p className="mt-1 text-xs text-muted">
-              Users connect their Solana wallet (Phantom, Solflare) via Privy. In production,
-              this links to their actual Pacifica positions for real P&L tracking. The bridge
-              (Rhino.fi) lets them fund from any chain into Solana USDC.
+              Users enter their Solana wallet address directly. Alpha Compass reads real Pacifica
+              positions and orders via public API — no signing, no auth required. Pacifica exposes
+              all account data at <code className="text-xs">/positions?account=&lt;address&gt;</code>.
             </p>
           </div>
         </div>
@@ -125,11 +124,9 @@ export default function ArchitecturePage() {
                                         |
                                         |-- Alpha Score Engine   [5 signals → composite score]
                                         |-- AI Consensus Engine  [3 LLMs fed with Alpha Score data]
-                                        |   |-- Claude API       [risk analysis]
-                                        |   |-- OpenAI API       [sentiment analysis]
-                                        |   |-- Groq API         [technical analysis, free]
-                                        |
-                                        |-- Elfa AI API         [social sentiment]
+                                        |   |-- Groq API (Llama-4-Scout)  [risk analysis, free]
+                                        |   |-- OpenAI API (GPT-4o)       [sentiment analysis]
+                                        |   |-- Groq API (Llama-3.3-70b)  [technical analysis, free]
                                         |
                                         |-- 1hr cache           [minimize API costs]`}
         </pre>
@@ -162,9 +159,9 @@ export default function ArchitecturePage() {
           <div className="rounded-lg bg-background/50 p-4">
             <h3 className="text-sm font-medium">API Key Protection</h3>
             <p className="mt-1 text-xs text-muted">
-              All LLM API keys (OpenAI, Anthropic, Groq) and the Elfa AI key are stored
-              server-side only. Never exposed to the browser. The Vercel→Backend proxy
-              uses an internal API key header for authentication.
+              All LLM API keys (OpenAI, Groq) are stored server-side only.
+              Never exposed to the browser. The Vercel→Backend proxy uses an
+              internal API key header for authentication.
             </p>
           </div>
           <div className="rounded-lg bg-background/50 p-4">
@@ -184,8 +181,9 @@ export default function ArchitecturePage() {
           <div className="rounded-lg bg-background/50 p-4">
             <h3 className="text-sm font-medium">Data Privacy</h3>
             <p className="mt-1 text-xs text-muted">
-              Wallet connections via Privy stay client-side. We never store private keys
-              or wallet data on our servers. Portfolio data flows directly from Pacifica API.
+              No private keys stored anywhere — portfolio lookup uses public Pacifica API
+              endpoints (read-only). We never store wallet addresses on our servers.
+              Only on-chain public data is accessed.
             </p>
           </div>
         </div>
@@ -216,8 +214,8 @@ export default function ArchitecturePage() {
               ))}
               <tr className="font-bold">
                 <td className="py-2 pr-4">Total (estimated)</td>
-                <td className="py-2 pr-4 font-mono text-success">~$9/mo</td>
-                <td className="py-2 text-muted">At moderate usage (100 analyses/day)</td>
+                <td className="py-2 pr-4 font-mono text-success">~$5/mo</td>
+                <td className="py-2 text-muted">At moderate usage (100 analyses/day, 24hr cache)</td>
               </tr>
             </tbody>
           </table>
