@@ -6,23 +6,15 @@ import logging
 import os
 from datetime import datetime
 
-from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 from schemas import AIAnalysis, ConsensusResult, MarketDirection, MarketRegime
 
 logger = logging.getLogger(__name__)
 
 # Clients (initialized lazily)
-_anthropic: AsyncAnthropic | None = None
 _openai: AsyncOpenAI | None = None
 _groq: AsyncOpenAI | None = None
-
-
-def _get_anthropic() -> AsyncAnthropic:
-    global _anthropic
-    if _anthropic is None:
-        _anthropic = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    return _anthropic
+_gemini: AsyncOpenAI | None = None
 
 
 def _get_openai() -> AsyncOpenAI:
@@ -40,6 +32,16 @@ def _get_groq() -> AsyncOpenAI:
             base_url="https://api.groq.com/openai/v1",
         )
     return _groq
+
+
+def _get_gemini() -> AsyncOpenAI:
+    global _gemini
+    if _gemini is None:
+        _gemini = AsyncOpenAI(
+            api_key=os.getenv("GEMINI_API_KEY"),
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+    return _gemini
 
 
 RISK_PROMPT = """You are a risk analyst evaluating a perpetual futures market on Pacifica DEX.
@@ -145,21 +147,21 @@ def _parse_ai_response(text: str) -> dict:
 
 
 async def _analyze_risk(market_data: dict) -> AIAnalysis:
-    """Claude analyzes risk."""
+    """Llama 4 Scout (via Groq) analyzes risk."""
     try:
-        client = _get_anthropic()
+        client = _get_groq()
         prompt = RISK_PROMPT.format(**market_data)
         resp = await asyncio.wait_for(
-            client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=500,
+            client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
             ),
             timeout=30,
         )
-        parsed = _parse_ai_response(resp.content[0].text)
+        parsed = _parse_ai_response(resp.choices[0].message.content)
         return AIAnalysis(
-            model_name="claude",
+            model_name="llama4",
             role="risk",
             direction=MarketDirection(parsed["direction"]),
             confidence=parsed["confidence"],
@@ -168,9 +170,9 @@ async def _analyze_risk(market_data: dict) -> AIAnalysis:
             key_factors=parsed.get("key_factors", []),
         )
     except Exception as e:
-        logger.error(f"Claude risk analysis failed: {e}")
+        logger.error(f"Llama 4 risk analysis failed: {e}")
         return AIAnalysis(
-            model_name="claude",
+            model_name="llama4",
             role="risk",
             direction=MarketDirection.NEUTRAL,
             confidence=0.3,
