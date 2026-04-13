@@ -101,6 +101,12 @@ export default function AccuracyPage() {
         <p className="mt-1 text-sm text-muted">
           Real-time performance metrics of Alpha Score across all markets
         </p>
+        <a
+          href="/methodology"
+          className="mt-2 inline-flex items-center gap-1 rounded-lg bg-blue-400/10 px-3 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-400/20"
+        >
+          How we validate signals &rarr;
+        </a>
       </div>
 
       {error && (

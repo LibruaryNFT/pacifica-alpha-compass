@@ -6,33 +6,27 @@ import { usePathname } from "next/navigation";
 import {
   Compass,
   BarChart3,
-  Wallet,
   Brain,
   Zap,
   Bell,
   FlaskConical,
   Menu,
   X,
-  Gift,
-  Layers,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const PRIMARY_NAV = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
   { href: "/alpha", label: "Alpha Score", icon: Zap },
-  { href: "/smart-money", label: "Smart Money", icon: Zap },
   { href: "/ai", label: "AI Consensus", icon: Brain },
+  { href: "/accuracy", label: "Live Accuracy", icon: FlaskConical },
 ];
 
 const SECONDARY_NAV = [
-  { href: "/pulse", label: "Live Trades", icon: BarChart3 },
-  { href: "/portfolio", label: "Portfolio", icon: Wallet },
-  { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/accuracy", label: "Live Accuracy", icon: FlaskConical },
+  { href: "/smart-money", label: "Smart Money", icon: Zap },
   { href: "/backtest", label: "Backtest", icon: Compass },
-  { href: "/referrals", label: "Referrals", icon: Gift },
-  { href: "/architecture", label: "Architecture", icon: Layers },
+  { href: "/pulse", label: "Live Trades", icon: BarChart3 },
+  { href: "/alerts", label: "Alerts", icon: Bell },
 ];
 
 const WalletButton = dynamic(() => import("./WalletButton"), {

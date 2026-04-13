@@ -127,7 +127,8 @@ function AlphaScoreContent() {
           Alpha Score
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Proprietary composite trading intelligence — 5 signals, 1 score, actionable trades
+          Composite 0&ndash;100 score from 5 Pacifica signals: momentum, volatility, funding rates, volume, and orderbook depth. Above 58 = bullish, below 42 = bearish. Each signal is weighted and derived from live Pacifica API data &mdash; updated every 60 seconds.{" "}
+          <a href="/methodology" className="text-primary hover:underline">Full methodology &rarr;</a>
         </p>
       </div>
 
