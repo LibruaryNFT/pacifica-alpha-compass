@@ -25,16 +25,10 @@ export default function Footer() {
                 Pacifica API
               </span>
               <span className="rounded bg-card px-2 py-0.5 text-foreground/70">
-                Elfa AI
+                Groq / Meta Llama
               </span>
               <span className="rounded bg-card px-2 py-0.5 text-foreground/70">
-                Privy
-              </span>
-              <span className="rounded bg-card px-2 py-0.5 text-foreground/70">
-                Rhino.fi
-              </span>
-              <span className="rounded bg-card px-2 py-0.5 text-foreground/70">
-                Fuul
+                OpenAI GPT-4o
               </span>
             </div>
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Zap,
   Loader2,
@@ -75,9 +76,25 @@ const RISK_COLORS: Record<string, string> = {
 };
 
 export default function AlphaScorePage() {
-  const [selected, setSelected] = useState<string>(TOP_MARKETS[0]);
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-6"><div className="h-64 animate-pulse rounded-lg bg-card" /></div>}>
+      <AlphaScoreContent />
+    </Suspense>
+  );
+}
+
+function AlphaScoreContent() {
+  const searchParams = useSearchParams();
+  const initialSymbol = searchParams.get("symbol") ?? TOP_MARKETS[0];
+  const [selected, setSelected] = useState<string>(initialSymbol);
   const [data, setData] = useState<AlphaScore | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Auto-analyze when navigated from dashboard with ?symbol=
+  useEffect(() => {
+    analyze(initialSymbol);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const analyze = async (symbol: string) => {
     setSelected(symbol);
