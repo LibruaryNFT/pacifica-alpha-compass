@@ -151,7 +151,20 @@ async function pacificaFetch<T>(path: string, fallback: () => T): Promise<T> {
 // --- Pacifica Direct (public market data — no auth needed) ---
 
 export async function fetchPrices(): Promise<MarketPrice[]> {
-  // market-price endpoint is 404, build prices from /trades
+  // Route through backend — returns real 24h change, volume, funding rates
+  try {
+    const res = await fetch("/api/prices", { cache: "no-store" });
+    if (!res.ok) throw new Error(`Proxy ${res.status}`);
+    const data = await res.json();
+    const items: unknown[] = Array.isArray(data) ? data : data?.prices ?? data?.data ?? [];
+    if (items.length > 0) {
+      return items.map((r) => normalizePrice(r as Record<string, unknown>));
+    }
+  } catch {
+    // fall through to Pacifica direct
+  }
+
+  // Fallback: hit Pacifica directly (no 24h change, but at least has price)
   const symbols = ["BTC", "ETH", "SOL", "DOGE", "ARB", "AVAX", "LINK", "OP"];
   try {
     const results = await Promise.allSettled(
@@ -161,20 +174,13 @@ export async function fetchPrices(): Promise<MarketPrice[]> {
         const data = await res.json();
         const trades = data?.data;
         if (!trades?.length) return null;
-        return {
-          symbol: `${sym}-USDC`,
-          price: parseFloat(trades[0].price),
-          markPrice: parseFloat(trades[0].price),
-        };
+        return { symbol: `${sym}-USDC`, price: parseFloat(trades[0].price), markPrice: parseFloat(trades[0].price) };
       })
     );
     const prices: MarketPrice[] = [];
     for (const r of results) {
-      if (r.status === "fulfilled" && r.value) {
-        prices.push(normalizePrice(r.value as Record<string, unknown>));
-      }
+      if (r.status === "fulfilled" && r.value) prices.push(normalizePrice(r.value as Record<string, unknown>));
     }
-
     return prices.length > 0 ? prices : mockPrices();
   } catch {
     return mockPrices();
