@@ -13,6 +13,8 @@ import {
   FlaskConical,
   Menu,
   X,
+  Gift,
+  Layers,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -29,6 +31,8 @@ const SECONDARY_NAV = [
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/accuracy", label: "Live Accuracy", icon: FlaskConical },
   { href: "/backtest", label: "Backtest", icon: Compass },
+  { href: "/referrals", label: "Referrals", icon: Gift },
+  { href: "/architecture", label: "Architecture", icon: Layers },
 ];
 
 const WalletButton = dynamic(() => import("./WalletButton"), {

@@ -243,7 +243,7 @@ export default function Dashboard() {
         <div className="rounded-lg border border-border bg-card p-3">
           <p className="text-xs text-muted">AI Models</p>
           <p className="mt-1 font-mono text-lg font-bold text-accent">3</p>
-          <p className="text-[10px] text-muted">Claude + GPT-4o + Llama-3</p>
+          <p className="text-[10px] text-muted">Llama-4 + GPT-4o + Llama-3</p>
         </div>
       </div>
 
