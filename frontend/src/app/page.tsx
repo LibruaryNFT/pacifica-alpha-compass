@@ -104,7 +104,15 @@ export default function Dashboard() {
       const aRes = await fetch("/api/accuracy");
       if (aRes.ok) {
         const aData = await aRes.json();
-        if (aData?.aggregate) setAccuracy(aData.aggregate);
+        if (aData?.overall_accuracy != null) {
+          setAccuracy({
+            accuracy: aData.overall_accuracy,
+            total_signals: aData.total_signals,
+            total_pnl_pct: aData.total_pnl ?? 0,
+            markets_collecting: aData.markets_with_data ?? 0,
+            markets_with_data: aData.markets_with_data ?? 0,
+          });
+        }
       }
     } catch { /* Accuracy unavailable */ }
   }, []);
