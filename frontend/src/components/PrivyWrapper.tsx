@@ -40,8 +40,6 @@ class PrivyErrorBoundary extends Component<
 }
 
 export default function PrivyWrapper({ children }: { children: ReactNode }) {
-  if (!PRIVY_APP_ID) {
-    return <>{children}</>;
-  }
-  return <PrivyErrorBoundary>{children}</PrivyErrorBoundary>;
+  // Privy disabled — app ID rejected by SDK; referrals page uses manual address input
+  return <>{children}</>;
 }
