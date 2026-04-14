@@ -173,10 +173,10 @@ export default function PortfolioPage() {
         <div>
           <h1 className="text-2xl font-bold">
             <Wallet className="mr-2 inline h-6 w-6 text-accent" />
-            Portfolio
+            Look Up Wallet
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Enter your Solana wallet address to see real Pacifica positions + AI recommendations
+            Enter any Solana wallet address to see their real Pacifica positions and open orders — read directly from Pacifica&apos;s public API
           </p>
         </div>
 

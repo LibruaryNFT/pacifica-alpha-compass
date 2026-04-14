@@ -68,6 +68,10 @@ function AIConsensusContent() {
         <h1 className="text-2xl font-bold">
           <Brain className="mr-2 inline h-6 w-6 text-accent" />
           AI Consensus Engine
+          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success align-middle">
+            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+            Live
+          </span>
         </h1>
         <p className="mt-1 text-sm text-muted">
           3 AI models independently analyze Pacifica market data — Llama-4 Scout (Risk), GPT-4o

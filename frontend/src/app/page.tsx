@@ -155,12 +155,12 @@ export default function Dashboard() {
             Real signals backtested on 563K Pacifica trades — 55.6% accuracy, verified live.
           </p>
           <div className="mt-2 flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs text-muted">
-              <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-success animate-pulse" : "bg-warning"}`} />
-              {wsConnected ? "Live WebSocket" : "REST polling"}
+            <span className="flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
+              <span className={`h-1.5 w-1.5 rounded-full ${wsConnected ? "bg-success animate-pulse" : "bg-warning"}`} />
+              {wsConnected ? "Live — Pacifica WebSocket" : "Live — Pacifica REST"}
             </span>
-            <span className="text-xs text-muted">
-              {prices.length > 0 && `${prices.length} markets`}
+            <span className="text-[10px] text-muted">
+              {prices.length > 0 && `${prices.length} markets · all data from Pacifica API`}
             </span>
           </div>
         </div>

@@ -97,6 +97,10 @@ export default function AccuracyPage() {
         <h1 className="text-2xl font-bold">
           <FlaskConical className="mr-2 inline h-6 w-6 text-blue-400" />
           Live Accuracy Dashboard
+          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success align-middle">
+            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+            Real Pacifica Data
+          </span>
         </h1>
         <p className="mt-1 text-sm text-muted">
           Real-time performance metrics of Alpha Score across all markets

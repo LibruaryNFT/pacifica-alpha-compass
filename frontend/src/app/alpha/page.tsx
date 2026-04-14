@@ -125,6 +125,10 @@ function AlphaScoreContent() {
         <h1 className="text-2xl font-bold">
           <Zap className="mr-2 inline h-6 w-6 text-yellow-400" />
           Alpha Score
+          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success align-middle">
+            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+            Live
+          </span>
         </h1>
         <p className="mt-1 text-sm text-muted">
           Composite 0&ndash;100 score from 5 Pacifica signals: momentum, volatility, funding rates, volume, and orderbook depth. Above 58 = bullish, below 42 = bearish. Each signal is weighted and derived from live Pacifica API data &mdash; updated every 60 seconds.{" "}
