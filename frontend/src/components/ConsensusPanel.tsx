@@ -21,7 +21,7 @@ const MODEL_CONFIG: Record<string, { icon: string; name: string; role: string; c
   llama3: { icon: "L3", name: "Llama-3.3 70B", role: "Technical Analyst", color: "text-purple-400", bgColor: "bg-purple-400/20", dataFeed: "Multi-timeframe EMA crossovers, rate-of-change, orderbook imbalance" },
 };
 
-function TypingText({ text, speed = 15 }: { text: string; speed?: number }) {
+function TypingText({ text, speed = 5 }: { text: string; speed?: number }) {
   const [displayed, setDisplayed] = useState("");
   const [done, setDone] = useState(false);
 
@@ -55,7 +55,7 @@ function ModelCard({ analysis, index }: { analysis: AIAnalysis; index: number })
   const dir = DIRECTION_CONFIG[analysis.direction];
 
   useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), index * 800);
+    const timer = setTimeout(() => setVisible(true), index * 400);
     return () => clearTimeout(timer);
   }, [index]);
 
@@ -243,6 +243,22 @@ export default function ConsensusPanel({ consensus, loading }: Props) {
             {consensus.regime.toUpperCase()}
           </span>
         </div>
+
+        {/* Disagreement indicator */}
+        {votes.bullish > 0 && votes.bearish > 0 && (
+          <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-2.5">
+            <p className="text-xs font-medium text-warning">
+              Split verdict — models disagree on direction. Lower confidence = higher uncertainty. Consider waiting.
+            </p>
+          </div>
+        )}
+        {(votes.bullish === 3 || votes.bearish === 3) && (
+          <div className="mt-3 rounded-md border border-success/30 bg-success/10 p-2.5">
+            <p className="text-xs font-medium text-success">
+              Unanimous — all 3 models agree. Historically correlates with stronger signal accuracy.
+            </p>
+          </div>
+        )}
 
         {/* Summary */}
         <p className="mt-3 text-sm text-foreground/80">{consensus.summary}</p>

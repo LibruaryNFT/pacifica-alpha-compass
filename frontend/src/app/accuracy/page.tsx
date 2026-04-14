@@ -218,51 +218,20 @@ export default function AccuracyPage() {
                 const market = data.markets[symbol];
 
                 if (!market) {
-                  // Still collecting
-                  const inProgress = data.candle_stats.markets_in_progress.includes(
-                    symbol
-                  );
-                  const collectPercent = inProgress
-                    ? (data.candle_stats.total_collected /
-                        data.candle_stats.total_needed) *
-                      100
-                    : 0;
-
                   return (
                     <div
                       key={symbol}
-                      className="rounded-xl border border-border bg-card p-6"
+                      className="rounded-xl border border-border/50 bg-card/50 p-6"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium">
+                          <p className="text-sm font-medium text-muted">
                             {symbol.replace("-USDC", "")}
                           </p>
-                          <p className="text-xs text-muted">Collecting data...</p>
+                          <p className="text-xs text-muted/60">Insufficient data for validation</p>
                         </div>
-                        <Loader2 className="h-5 w-5 animate-spin text-accent" />
+                        <span className="rounded bg-card px-2 py-0.5 text-[10px] text-muted">Pending</span>
                       </div>
-
-                      {inProgress && (
-                        <div className="mt-4">
-                          <div className="flex items-center justify-between text-xs mb-2">
-                            <span className="text-muted">Progress</span>
-                            <span className="font-mono text-foreground">
-                              {data.candle_stats.total_collected}/
-                              {data.candle_stats.total_needed}
-                            </span>
-                          </div>
-                          <div className="h-2 rounded-full bg-card-hover overflow-hidden">
-                            <div
-                              className="h-full bg-accent transition-all"
-                              style={{ width: `${collectPercent}%` }}
-                            />
-                          </div>
-                          <p className="mt-2 text-xs text-muted">
-                            {Math.round(collectPercent)}% complete
-                          </p>
-                        </div>
-                      )}
                     </div>
                   );
                 }
@@ -314,64 +283,6 @@ export default function AccuracyPage() {
                   </div>
                 );
               })}
-            </div>
-          </div>
-
-          {/* Data Pipeline Status */}
-          <div className="rounded-xl border border-border bg-card p-6">
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-medium">
-              <Database className="h-4 w-4" />
-              Data Pipeline Status
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-muted">Candles Collected</span>
-                  <span className="font-mono">
-                    {data.candle_stats.total_collected}/
-                    {data.candle_stats.total_needed}
-                  </span>
-                </div>
-                <div className="h-3 rounded-full bg-card-hover overflow-hidden">
-                  <div
-                    className="h-full bg-accent transition-all"
-                    style={{
-                      width: `${
-                        (data.candle_stats.total_collected /
-                          data.candle_stats.total_needed) *
-                        100
-                      }%`,
-                    }}
-                  />
-                </div>
-                <p className="mt-1 text-xs text-muted">
-                  {Math.round(
-                    (data.candle_stats.total_collected /
-                      data.candle_stats.total_needed) *
-                      100
-                  )}
-                  % complete across all markets
-                </p>
-              </div>
-
-              {data.candle_stats.markets_in_progress.length > 0 && (
-                <div>
-                  <p className="text-xs text-muted mb-2">
-                    Markets currently collecting:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {data.candle_stats.markets_in_progress.map((symbol) => (
-                      <span
-                        key={symbol}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-accent"
-                      >
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        {symbol.replace("-USDC", "")}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
