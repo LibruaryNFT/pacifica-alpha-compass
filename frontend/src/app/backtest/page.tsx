@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FlaskConical,
   Loader2,
@@ -46,6 +46,11 @@ export default function BacktestPage() {
   const [selected, setSelected] = useState<string>(TOP_MARKETS[0]);
   const [data, setData] = useState<BacktestResult | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    runBacktest(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const runBacktest = async (symbol: string) => {
     setSelected(symbol);

@@ -4,12 +4,9 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Brain, Loader2 } from "lucide-react";
 import ConsensusPanel from "@/components/ConsensusPanel";
-import SocialSentimentPanel from "@/components/SocialSentiment";
 import {
   fetchConsensus,
-  fetchSocialSentiment,
   type ConsensusResult,
-  type SocialSentiment,
 } from "@/lib/api";
 import { TOP_MARKETS } from "@/lib/constants";
 
@@ -27,9 +24,7 @@ function AIConsensusContent() {
 
   const [selectedMarket, setSelectedMarket] = useState(initialSymbol);
   const [consensus, setConsensus] = useState<ConsensusResult | null>(null);
-  const [sentiment, setSentiment] = useState<SocialSentiment | null>(null);
   const [loading, setLoading] = useState(false);
-  const [sentimentLoading, setSentimentLoading] = useState(false);
   const [history, setHistory] = useState<ConsensusResult[]>([]);
 
   const loadHistory = async () => {
@@ -49,24 +44,15 @@ function AIConsensusContent() {
   const runAnalysis = async (symbol: string) => {
     setSelectedMarket(symbol);
     setLoading(true);
-    setSentimentLoading(true);
     setConsensus(null);
-    setSentiment(null);
     try {
-      // Run AI consensus and social sentiment in parallel
-      const [aiResult, socialResult] = await Promise.all([
-        fetchConsensus(symbol),
-        fetchSocialSentiment(symbol),
-      ]);
+      const aiResult = await fetchConsensus(symbol);
       setConsensus(aiResult);
-      setSentiment(socialResult);
-      // Refresh history from backend (includes this new result)
       loadHistory();
     } catch (error) {
       console.error("Analysis failed:", error);
     } finally {
       setLoading(false);
-      setSentimentLoading(false);
     }
   };
 
@@ -124,15 +110,7 @@ function AIConsensusContent() {
       )}
 
       {/* Consensus result */}
-      {/* AI Consensus + Social Sentiment side by side */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <ConsensusPanel consensus={consensus} loading={loading} />
-        </div>
-        <div>
-          <SocialSentimentPanel sentiment={sentiment} loading={sentimentLoading} />
-        </div>
-      </div>
+      <ConsensusPanel consensus={consensus} loading={loading} />
 
       {/* Persistent analysis history (from backend — survives page reloads) */}
       {history.length > 0 && (
