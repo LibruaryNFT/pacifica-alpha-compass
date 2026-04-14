@@ -399,14 +399,14 @@ function AlphaScoreContent() {
                     </div>
                   </div>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <div className="h-2 flex-1 rounded-full bg-card-hover">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-card-hover">
                       <div
-                        className="h-full rounded-full bg-accent transition-all"
+                        className={`h-full rounded-full transition-all ${signal.value >= 0 ? "bg-success" : "bg-danger"}`}
                         style={{
-                          width: `${Math.abs(signal.value) * 50 + 50}%`,
+                          width: `${Math.min(Math.abs(signal.value) * 50, 50)}%`,
                           marginLeft:
                             signal.value < 0
-                              ? `${50 - Math.abs(signal.value) * 50}%`
+                              ? `${Math.max(50 - Math.abs(signal.value) * 50, 0)}%`
                               : "50%",
                         }}
                       />

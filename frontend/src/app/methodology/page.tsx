@@ -20,27 +20,21 @@ export default function MethodologyPage() {
       <section className="rounded-xl border border-success/20 bg-success/5 p-6">
         <h2 className="flex items-center gap-2 text-lg font-bold text-success">
           <Target className="h-5 w-5" />
-          Why 55.6% Is a Proven Edge
+          Accuracy Tracking
         </h2>
         <div className="mt-4 space-y-3 text-sm leading-relaxed">
           <p>
-            In leveraged perpetual futures, absolute win rate is secondary to <strong>expectancy</strong> &mdash; the mathematical edge per trade. A 55.6% win rate sounds modest until you understand how professional quants think:
+            Alpha Compass tracks every prediction against real Pacifica price data. This is not a backtest on historical data &mdash; signals are logged in real time and validated as the market moves.
           </p>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="font-mono text-xs text-muted">Expected Value per trade (1.5:1 Risk/Reward):</p>
-            <p className="mt-2 font-mono text-sm">
-              EV = (0.556 &times; $150) &minus; (0.444 &times; $100) = <strong className="text-success">+$39.00 per unit risked</strong>
-            </p>
-            <p className="mt-2 text-xs text-muted">
-              Every $100 risked has a mathematical return of $139. With 10x leverage on Pacifica perpetuals, this compounds aggressively.
-            </p>
+          <p>
+            Early results are encouraging but the system is still young. Accuracy varies by market and timeframe. Some markets (ARB, LINK) show stronger signal quality than others (SOL, DOGE). The <a href="/accuracy" className="text-primary hover:underline">Live Accuracy</a> page shows all results transparently, including markets where the system underperforms.
+          </p>
+          <p>
+            In leveraged perpetual futures, even a modest directional edge can be meaningful when paired with disciplined risk management. The Alpha Score trade suggestions include explicit stop-loss and risk/reward ratios to encourage systematic trading.
+          </p>
+          <div className="rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs text-muted">
+            <strong className="text-warning">Important:</strong> These are early-stage results on a limited sample. The system is designed to improve as more Pacifica data accumulates. Past signal accuracy does not guarantee future performance.
           </div>
-          <p>
-            <strong>For context:</strong> Renaissance Technologies&apos; Medallion Fund &mdash; the most profitable hedge fund in history ($100B+ in cumulative profits) &mdash; achieved its returns with a win rate of approximately <strong>50.75%</strong>. Alpha Compass demonstrates <strong>7.5x the directional edge per trade</strong>.
-          </p>
-          <p>
-            A binomial test of 190 wins on 342 signals against a 50% null hypothesis yields a <strong>Z-score of 2.07</strong> and a <strong>p-value of 0.019</strong>. There is less than a 2% probability these results occurred by chance. This exceeds the industry standard threshold (p &lt; 0.05) for statistical significance.
-          </p>
         </div>
       </section>
 

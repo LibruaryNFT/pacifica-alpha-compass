@@ -132,37 +132,47 @@ export default function SmartMoneyPage() {
         </div>
       )}
 
-      {/* Smart Money Signals */}
+      {/* Smart Money Positions */}
       {smartMoney && smartMoney.signals.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
             <Eye className="h-5 w-5 text-yellow-400" />
-            Smart Money Flow
-            <span className="text-xs font-normal text-muted">What the top {smartMoney.whales_analyzed} most profitable traders are positioned</span>
+            Where Smart Money Is Positioned
+            <span className="text-xs font-normal text-muted">Top {smartMoney.whales_analyzed} most profitable Pacifica traders</span>
           </h2>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {smartMoney.signals.map((sig) => {
-              const biasColor = sig.smart_money_bias === "bullish" ? "border-success/30 bg-success/5" : sig.smart_money_bias === "bearish" ? "border-danger/30 bg-danger/5" : "border-warning/30 bg-warning/5";
-              const textColor = sig.smart_money_bias === "bullish" ? "text-success" : sig.smart_money_bias === "bearish" ? "text-danger" : "text-warning";
-              return (
-                <div key={sig.symbol} className={`rounded-lg border p-3 ${biasColor}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold">{sig.symbol}</span>
-                    <span className={`flex items-center gap-1 text-xs font-bold ${textColor}`}>
-                      {sig.smart_money_bias === "bullish" ? <TrendingUp className="h-3 w-3" /> : sig.smart_money_bias === "bearish" ? <TrendingDown className="h-3 w-3" /> : null}
-                      {sig.smart_money_bias.toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex justify-between text-[10px] text-muted">
-                    <span className="text-success">{sig.long_whales} whale{sig.long_whales !== 1 ? "s" : ""} long</span>
-                    <span className="text-danger">{sig.short_whales} whale{sig.short_whales !== 1 ? "s" : ""} short</span>
-                  </div>
-                  <p className="mt-1 text-[10px] text-muted">
-                    ${sig.total_exposure_usd >= 1e6 ? `${(sig.total_exposure_usd / 1e6).toFixed(1)}M` : `${(sig.total_exposure_usd / 1e3).toFixed(0)}K`} exposure
-                  </p>
-                </div>
-              );
-            })}
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-card text-left text-xs text-muted">
+                  <th className="px-4 py-2">Market</th>
+                  <th className="px-4 py-2">Bias</th>
+                  <th className="px-4 py-2">Longs</th>
+                  <th className="px-4 py-2">Shorts</th>
+                  <th className="px-4 py-2">Exposure</th>
+                </tr>
+              </thead>
+              <tbody>
+                {smartMoney.signals.slice(0, 10).map((sig) => {
+                  const textColor = sig.smart_money_bias === "bullish" ? "text-success" : sig.smart_money_bias === "bearish" ? "text-danger" : "text-warning";
+                  return (
+                    <tr key={sig.symbol} className="border-b border-border/30 hover:bg-card-hover">
+                      <td className="px-4 py-2 font-medium">{sig.symbol}</td>
+                      <td className={`px-4 py-2 font-bold ${textColor}`}>
+                        <span className="flex items-center gap-1">
+                          {sig.smart_money_bias === "bullish" ? <TrendingUp className="h-3 w-3" /> : sig.smart_money_bias === "bearish" ? <TrendingDown className="h-3 w-3" /> : null}
+                          {sig.smart_money_bias.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 font-mono text-success">{sig.long_whales}</td>
+                      <td className="px-4 py-2 font-mono text-danger">{sig.short_whales}</td>
+                      <td className="px-4 py-2 font-mono">
+                        ${sig.total_exposure_usd >= 1e6 ? `${(sig.total_exposure_usd / 1e6).toFixed(1)}M` : `${(sig.total_exposure_usd / 1e3).toFixed(0)}K`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </section>
       )}
