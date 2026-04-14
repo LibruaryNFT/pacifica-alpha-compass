@@ -16,7 +16,7 @@ const STEPS = [
     iconColor: "text-accent",
     title: "AI Consensus",
     description:
-      "Three AI models (Claude, GPT-4o, Llama-3) independently analyze each market and debate. Their consensus gives you confidence in the signal.",
+      "Three AI models (Llama-4 Scout, GPT-4o, Llama-3.3 70B) independently analyze each market. Their consensus gives you confidence in the signal.",
   },
   {
     icon: BarChart3,
