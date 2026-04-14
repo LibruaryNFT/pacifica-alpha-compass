@@ -92,9 +92,13 @@ export default function SmartMoneyPage() {
         <h1 className="text-2xl font-bold">
           <Crown className="mr-2 inline h-6 w-6 text-yellow-400" />
           Smart Money
+          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success align-middle">
+            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+            Live from Pacifica API
+          </span>
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Track what Pacifica&apos;s most profitable traders are doing right now — only possible because Pacifica&apos;s position data is public
+          Track what Pacifica&apos;s most profitable traders are doing right now — all data read directly from Pacifica&apos;s public leaderboard and position APIs
         </p>
       </div>
 
@@ -150,8 +154,8 @@ export default function SmartMoneyPage() {
                     </span>
                   </div>
                   <div className="mt-2 flex justify-between text-[10px] text-muted">
-                    <span className="text-success">{sig.long_whales} long</span>
-                    <span className="text-danger">{sig.short_whales} short</span>
+                    <span className="text-success">{sig.long_whales} whale{sig.long_whales !== 1 ? "s" : ""} long</span>
+                    <span className="text-danger">{sig.short_whales} whale{sig.short_whales !== 1 ? "s" : ""} short</span>
                   </div>
                   <p className="mt-1 text-[10px] text-muted">
                     ${sig.total_exposure_usd >= 1e6 ? `${(sig.total_exposure_usd / 1e6).toFixed(1)}M` : `${(sig.total_exposure_usd / 1e3).toFixed(0)}K`} exposure

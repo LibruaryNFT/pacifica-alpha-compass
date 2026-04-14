@@ -122,7 +122,7 @@ export default function Dashboard() {
       const lRes = await fetch("/api/pacifica/leaderboard");
       if (lRes.ok) {
         const lData = await lRes.json();
-        const s = lData?.exchange_stats;
+        const s = lData?.exchange_stats ?? lData?.exchange;
         if (s?.total_traders) {
           setExchangeStats({
             total_traders: s.total_traders,
