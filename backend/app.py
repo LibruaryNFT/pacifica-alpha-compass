@@ -151,6 +151,9 @@ async def _precompute_alpha_scores() -> None:
                     price = float(price_data.get("price", price_data.get("markPrice", price_data.get("lastPrice", 0))))
                     funding = float(price_data.get("fundingRate", 0))
                     change = float(price_data.get("change24h", price_data.get("priceChange24h", 0)))
+                    real_change = get_candle_24h_change(symbol)
+                    if real_change != 0.0:
+                        change = real_change
                     volume = float(price_data.get("volume24h", price_data.get("volume", 0)))
                     oi = float(price_data.get("openInterest", 0))
                     candle_list = candles if isinstance(candles, list) else candles.get("data", [])
@@ -289,9 +292,15 @@ async def get_markets():
 async def get_all_prices():
     """Get current prices for all markets."""
     data = await _try_live_or_mock(pac.get_all_market_prices, mock_data.get_all_prices, "prices")
-    if isinstance(data, list):
-        return data
-    return data.get("data", data.get("prices", []))
+    items = data if isinstance(data, list) else data.get("data", data.get("prices", []))
+    for item in items:
+        sym = item.get("symbol", "")
+        if sym:
+            real_change = get_candle_24h_change(sym)
+            if real_change != 0.0:
+                item["change24h"] = real_change
+                item["priceChange24h"] = real_change
+    return items
 
 
 @app.get("/api/price/{symbol}")
@@ -614,6 +623,9 @@ async def alpha_score(symbol: str, _: None = Depends(verify_api_key)):
         price = float(price_data.get("price", price_data.get("markPrice", price_data.get("lastPrice", 0))))
         funding = float(price_data.get("fundingRate", 0))
         change = float(price_data.get("change24h", price_data.get("priceChange24h", 0)))
+        real_change = get_candle_24h_change(symbol)
+        if real_change != 0.0:
+            change = real_change
         volume = float(price_data.get("volume24h", price_data.get("volume", 0)))
         oi = float(price_data.get("openInterest", 0))
 

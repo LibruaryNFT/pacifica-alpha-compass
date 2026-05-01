@@ -297,3 +297,22 @@ async def start_collector() -> None:
         _connect_websocket(),
         return_exceptions=True,
     )
+
+
+def get_24h_change(symbol: str) -> float:
+    """Compute real 24h price change % from collected candles. Returns 0.0 if insufficient data."""
+    db = _get_db()
+    full_symbol = symbol if "-" in symbol else f"{symbol}-USDC"
+    rows = db.execute(
+        """SELECT bucket_start, close FROM candles
+           WHERE symbol=? AND interval_s=3600
+           ORDER BY bucket_start DESC LIMIT 26""",
+        (full_symbol,),
+    ).fetchall()
+    if len(rows) < 2:
+        return 0.0
+    current_close = rows[0][1]
+    past_close = rows[min(24, len(rows) - 1)][1]
+    if past_close <= 0:
+        return 0.0
+    return round((current_close - past_close) / past_close * 100, 2)
